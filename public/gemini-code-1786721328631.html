@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Office AirDrop Preview</title>
+  <!-- Google Fonts: Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  
+  <style>
+    :root {
+      --bg-dark: #0b0c16;
+      --sidebar-bg: #121324;
+      --card-bg: rgba(26, 27, 47, 0.7);
+      --card-border: rgba(255, 255, 255, 0.08);
+      --accent: #6366f1;
+      --accent-hover: #4f46e5;
+      --accent-glow: rgba(99, 102, 241, 0.25);
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --online: #10b981;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'Inter', sans-serif;
+    }
+
+    body {
+      background-color: var(--bg-dark);
+      color: var(--text-main);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      overflow: hidden;
+    }
+
+    /* Background Ambient Glow */
+    .ambient-glow {
+      position: absolute;
+      width: 500px;
+      height: 500px;
+      background: radial-gradient(circle, rgba(99, 102, 241, 0.18) 0%, rgba(139, 92, 246, 0.05) 50%, transparent 70%);
+      top: 20%;
+      right: 15%;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* Window Shell */
+    .app-window {
+      position: relative;
+      z-index: 1;
+      width: 960px;
+      height: 620px;
+      background: #0f1021;
+      border-radius: 16px;
+      border: 1px solid var(--card-border);
+      box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 255, 255, 0.05);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* Window Header / Title Bar */
+    .title-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 18px;
+      background: #0d0e1c;
+      border-bottom: 1px solid var(--card-border);
+      -webkit-app-region: drag;
+    }
+
+    .app-branding {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: #cbd5e1;
+    }
+
+    .logo-icon {
+      width: 22px;
+      height: 22px;
+      background: linear-gradient(135deg, #6366f1, #a855f7);
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+    }
+
+    .window-controls {
+      display: flex;
+      gap: 14px;
+      color: var(--text-muted);
+    }
+
+    .window-controls svg {
+      width: 14px;
+      height: 14px;
+      cursor: pointer;
+      transition: color 0.2s;
+    }
+
+    .window-controls svg:hover {
+      color: #fff;
+    }
+
+    /* Main Container */
+    .app-body {
+      display: flex;
+      flex: 1;
+      height: calc(100% - 45px);
+    }
+
+    /* Sidebar Navigation */
+    .sidebar {
+      width: 220px;
+      background: var(--sidebar-bg);
+      border-right: 1px solid var(--card-border);
+      padding: 24px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 11px 14px;
+      border-radius: 10px;
+      color: var(--text-muted);
+      text-decoration: none;
+      font-size: 0.9rem;
+      font-weight: 500;
+      transition: all 0.2s ease;
+      cursor: pointer;
+    }
+
+    .nav-item:hover {
+      background: rgba(255, 255, 255, 0.04);
+      color: #fff;
+    }
+
+    .nav-item.active {
+      background: rgba(99, 102, 241, 0.15);
+      color: #818cf8;
+      border: 1px solid rgba(99, 102, 241, 0.2);
+    }
+
+    /* Main Content Area */
+    .content-area {
+      flex: 1;
+      padding: 36px 48px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      overflow-y: auto;
+    }
+
+    .header-section {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+    }
+
+    .page-title {
+      font-size: 1.6rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: var(--online);
+      background: rgba(16, 185, 129, 0.1);
+      border: 1px solid rgba(16, 185, 129, 0.2);
+      padding: 3px 8px;
+      border-radius: 20px;
+    }
+
+    .status-dot {
+      width: 6px;
+      height: 6px;
+      background: var(--online);
+      border-radius: 50%;
+      box-shadow: 0 0 8px var(--online);
+    }
+
+    .subtitle {
+      color: var(--text-muted);
+      font-size: 0.88rem;
+      margin-top: 4px;
+    }
+
+    /* Segmented Tab Controls */
+    .tab-group {
+      background: rgba(0, 0, 0, 0.35);
+      padding: 4px;
+      border-radius: 12px;
+      border: 1px solid var(--card-border);
+      display: inline-flex;
+      gap: 4px;
+      margin: 20px 0;
+      align-self: center;
+    }
+
+    .tab-btn {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 18px;
+      border-radius: 8px;
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      font-size: 0.85rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .tab-btn:hover {
+      color: #fff;
+    }
+
+    .tab-btn.active {
+      background: #252843;
+      color: #fff;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    }
+
+    /* Central Connect Card */
+    .card-container {
+      display: flex;
+      justify-content: center;
+      margin-bottom: auto;
+    }
+
+    .connect-card {
+      background: var(--card-bg);
+      backdrop-filter: blur(16px);
+      border: 1px solid var(--card-border);
+      border-radius: 20px;
+      padding: 24px;
+      width: 320px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      box-shadow: 0 16px 32px -8px rgba(0, 0, 0, 0.4);
+    }
+
+    .card-header {
+      margin-bottom: 18px;
+    }
+
+    .card-header h3 {
+      font-size: 1.05rem;
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+
+    .card-header p {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+    }
+
+    .qr-frame {
+      background: #ffffff;
+      padding: 12px;
+      border-radius: 14px;
+      box-shadow: 0 6px 18px rgba(0, 0, 0, 0.25);
+      margin-bottom: 20px;
+    }
+
+    .qr-frame img {
+      width: 170px;
+      height: 170px;
+      display: block;
+    }
+
+    /* Network Info Pill */
+    .network-pill {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--card-border);
+      padding: 8px 14px;
+      border-radius: 10px;
+      width: 100%;
+      text-align: left;
+    }
+
+    .network-icon {
+      color: #818cf8;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .network-text {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .network-title {
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: #cbd5e1;
+    }
+
+    .network-sub {
+      font-size: 0.7rem;
+      color: var(--text-muted);
+    }
+  </style>
+</head>
+<body>
+
+  <div class="ambient-glow"></div>
+
+  <main class="app-window">
+    <!-- Window Bar -->
+    <header class="title-bar">
+      <div class="app-branding">
+        <div class="logo-icon">
+          <i data-lucide="zap" style="width: 14px; height: 14px;"></i>
+        </div>
+        <span>Office AirDrop</span>
+      </div>
+      <div class="window-controls">
+        <i data-lucide="minus"></i>
+        <i data-lucide="square"></i>
+        <i data-lucide="x"></i>
+      </div>
+    </header>
+
+    <div class="app-body">
+      <!-- Sidebar -->
+      <nav class="sidebar">
+        <a class="nav-item active">
+          <i data-lucide="share-2" style="width: 18px; height: 18px;"></i>
+          <span>Share</span>
+        </a>
+        <a class="nav-item">
+          <i data-lucide="clock" style="width: 18px; height: 18px;"></i>
+          <span>History</span>
+        </a>
+        <a class="nav-item">
+          <i data-lucide="settings" style="width: 18px; height: 18px;"></i>
+          <span>Settings</span>
+        </a>
+      </nav>
+
+      <!-- Content -->
+      <section class="content-area">
+        <div class="header-section">
+          <div>
+            <h1 class="page-title">
+              Office AirDrop 
+              <span class="status-badge">
+                <span class="status-dot"></span> Ready
+              </span>
+            </h1>
+            <p class="subtitle">Send and receive files seamlessly from your mobile device</p>
+          </div>
+        </div>
+
+        <!-- Segmented Tab Switcher -->
+        <div class="tab-group">
+          <button class="tab-btn">
+            <i data-lucide="monitor" style="width: 16px; height: 16px;"></i>
+            Nearby Computers
+          </button>
+          <button class="tab-btn active">
+            <i data-lucide="smartphone" style="width: 16px; height: 16px;"></i>
+            Connect Phone
+          </button>
+        </div>
+
+        <!-- Connection Card -->
+        <div class="card-container">
+          <div class="connect-card">
+            <div class="card-header">
+              <h3>Scan to Connect</h3>
+              <p>Point your phone camera to start transferring</p>
+            </div>
+
+            <!-- QR Code -->
+            <div class="qr-frame">
+              <img src="https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=https://airdrop.local" alt="Connection QR Code">
+            </div>
+
+            <!-- Embedded Wi-Fi Notification -->
+            <div class="network-pill">
+              <div class="network-icon">
+                <i data-lucide="wifi" style="width: 18px; height: 18px;"></i>
+              </div>
+              <div class="network-text">
+                <span class="network-title">Wi-Fi Connection Required</span>
+                <span class="network-sub">Both devices must share the same network</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <script>
+    lucide.createIcons();
+  </script>
+</body>
+</html>
