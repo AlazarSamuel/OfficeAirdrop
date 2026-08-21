@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react'
-import { Image as ImageIcon, X, Loader2, PlayCircle, Plus, Settings2, CheckCircle2, MonitorPlay, Timer, Minus, ImagePlus, Clock, Sparkles } from 'lucide-react'
-import { motion, AnimatePresence } from 'motion/react'
+import { Image as ImageIcon, X, Loader2, PlayCircle, Plus, Settings2, CheckCircle2, MonitorPlay, Timer, Minus, ImagePlus, Clock, Sparkles, ChevronUp, ChevronDown, Trash2, ListRestart, GripVertical } from 'lucide-react'
+import { motion, AnimatePresence, Reorder } from 'motion/react'
 
 export default function SlideMakerView({ triggerToast }) {
   const [images, setImages] = useState([])
   const [duration, setDuration] = useState(3)
+  const [transition, setTransition] = useState('fade')
   const [status, setStatus] = useState('idle') // idle, processing, complete, error
   const [lastOutput, setLastOutput] = useState(null)
 
@@ -40,14 +41,14 @@ export default function SlideMakerView({ triggerToast }) {
   const handlePickImages = async () => {
     if (!window.electronAPI) return
     try {
-      const files = await window.electronAPI.pickFiles()
+      const files = await window.electronAPI.pickFiles({ type: 'images' })
       if (files && files.length > 0) {
         const imageFiles = files.filter(f => f.match(/\.(jpg|jpeg|png|webp)$/i))
         if (imageFiles.length === 0) {
           triggerToast('No valid images selected.')
           return
         }
-        setImages(prev => [...prev, ...imageFiles])
+        setImages(prev => [...prev, ...imageFiles.map(path => ({ id: window.crypto.randomUUID(), path }))])
       }
     } catch (e) {
       triggerToast('Error picking images')
@@ -58,12 +59,34 @@ export default function SlideMakerView({ triggerToast }) {
     setImages(prev => prev.filter((_, i) => i !== index))
   }
 
+  const handleMoveImage = (index, direction) => {
+    setImages(prev => {
+      const newImages = [...prev];
+      if (direction === 'up' && index > 0) {
+        [newImages[index - 1], newImages[index]] = [newImages[index], newImages[index - 1]];
+      } else if (direction === 'down' && index < newImages.length - 1) {
+        [newImages[index + 1], newImages[index]] = [newImages[index], newImages[index + 1]];
+      }
+      return newImages;
+    });
+  }
+
+  const handleClearAll = () => {
+    setImages([])
+    setStatus('idle')
+    setLastOutput(null)
+  }
+
+  const handleStartNew = () => {
+    handleClearAll()
+  }
+
   const handleGenerate = async () => {
     if (images.length === 0) return
     if (!window.electronAPI) return
     setStatus('processing')
     setLastOutput(null)
-    await window.electronAPI.createSlideshow(images, duration)
+    await window.electronAPI.createSlideshow(images.map(img => img.path), duration, transition)
   }
 
   const handleOpenFolder = () => {
@@ -136,6 +159,8 @@ export default function SlideMakerView({ triggerToast }) {
               Transition:
             </span>
             <select 
+              value={transition}
+              onChange={e => setTransition(e.target.value)}
               className="outline-none"
               style={{
                 background: 'rgba(0, 0, 0, 0.35)',
@@ -147,7 +172,11 @@ export default function SlideMakerView({ triggerToast }) {
                 cursor: 'pointer'
               }}
             >
+              <option value="random" style={{ background: '#121324' }}>Random (Mix & Match)</option>
               <option value="fade" style={{ background: '#121324' }}>Smooth Fade (Ken Burns)</option>
+              <option value="slideleft" style={{ background: '#121324' }}>Dynamic Slide Left</option>
+              <option value="circlecrop" style={{ background: '#121324' }}>Cinematic Circle Wipe</option>
+              <option value="pixelize" style={{ background: '#121324' }}>Digital Pixelize</option>
             </select>
           </div>
         </div>
@@ -159,23 +188,42 @@ export default function SlideMakerView({ triggerToast }) {
               Selected Images <span style={{ background: 'rgba(255, 255, 255, 0.08)', color: '#94a3b8', padding: '2px 7px', borderRadius: '10px', fontSize: '0.75rem' }}>{images.length} photos</span>
             </span>
             {images.length > 0 && (
-              <button
-                onClick={handlePickImages}
-                className="flex items-center gap-[6px] cursor-pointer transition-all"
-                style={{
-                  fontSize: '0.8rem',
-                  fontWeight: 600,
-                  color: '#a5b4fc',
-                  background: 'rgba(99, 102, 241, 0.15)',
-                  border: '1px solid rgba(99, 102, 241, 0.3)',
-                  padding: '6px 14px',
-                  borderRadius: '8px'
-                }}
-                onMouseEnter={e => { e.currentTarget.style.background = 'rgba(99, 102, 241, 0.25)'; e.currentTarget.style.color = '#fff' }}
-                onMouseLeave={e => { e.currentTarget.style.background = 'rgba(99, 102, 241, 0.15)'; e.currentTarget.style.color = '#a5b4fc' }}
-              >
-                <Plus size={14} /> Add Photos
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleClearAll}
+                  className="flex items-center gap-[6px] cursor-pointer transition-all"
+                  style={{
+                    fontSize: '0.8rem',
+                    fontWeight: 600,
+                    color: '#f87171',
+                    background: 'rgba(239, 68, 68, 0.1)',
+                    border: '1px solid rgba(239, 68, 68, 0.2)',
+                    padding: '6px 14px',
+                    borderRadius: '8px'
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.background = 'rgba(239, 68, 68, 0.15)'; e.currentTarget.style.color = '#fca5a5' }}
+                  onMouseLeave={e => { e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)'; e.currentTarget.style.color = '#f87171' }}
+                >
+                  <Trash2 size={14} /> Clear All
+                </button>
+                <button
+                  onClick={handlePickImages}
+                  className="flex items-center gap-[6px] cursor-pointer transition-all"
+                  style={{
+                    fontSize: '0.8rem',
+                    fontWeight: 600,
+                    color: '#a5b4fc',
+                    background: 'rgba(99, 102, 241, 0.15)',
+                    border: '1px solid rgba(99, 102, 241, 0.3)',
+                    padding: '6px 14px',
+                    borderRadius: '8px'
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.background = 'rgba(99, 102, 241, 0.25)'; e.currentTarget.style.color = '#fff' }}
+                  onMouseLeave={e => { e.currentTarget.style.background = 'rgba(99, 102, 241, 0.15)'; e.currentTarget.style.color = '#a5b4fc' }}
+                >
+                  <Plus size={14} /> Add Photos
+                </button>
+              </div>
             )}
           </div>
 
@@ -213,44 +261,67 @@ export default function SlideMakerView({ triggerToast }) {
               </div>
             ) : (
               <AnimatePresence>
-                <div className="p-4 flex flex-col gap-2">
+                <Reorder.Group axis="y" values={images} onReorder={setImages} className="p-4 flex flex-col gap-2">
                   {images.map((img, idx) => (
-                    <motion.div
-                      key={img + idx}
+                    <Reorder.Item
+                      key={img.id}
+                      value={img}
                       initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, height: 0, overflow: 'hidden' }}
-                      className="flex items-center justify-between rounded-lg p-3 group"
+                      className="flex items-center justify-between rounded-lg p-3 group cursor-grab active:cursor-grabbing"
                       style={{
                         background: 'rgba(255,255,255,0.03)',
                         border: '1px solid rgba(255,255,255,0.05)'
                       }}
                     >
                       <div className="flex items-center gap-3 overflow-hidden">
+                        <GripVertical size={16} className="text-white/20 group-hover:text-white/40 cursor-grab active:cursor-grabbing" />
                         <div 
-                          className="w-10 h-10 rounded overflow-hidden bg-black/50"
+                          className="w-10 h-10 rounded overflow-hidden bg-black/50 flex-shrink-0"
                           style={{
-                            backgroundImage: `url('file:///${img.replace(/\\/g, '/')}')`,
+                            backgroundImage: `url('file:///${img.path.replace(/\\/g, '/')}')`,
                             backgroundSize: 'cover',
                             backgroundPosition: 'center'
                           }}
                         />
                         <span 
                           style={{ fontSize: '0.85rem', color: '#e2e8f0', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
-                          title={img}
+                          title={img.path}
                         >
-                          {img.split(/[/\\]/).pop()}
+                          {img.path.split(/[/\\]/).pop()}
                         </span>
                       </div>
-                      <button
-                        onClick={() => handleRemoveImage(idx)}
-                        className="opacity-0 group-hover:opacity-100 transition-opacity p-1 cursor-pointer rounded hover:bg-red-500/20 text-red-400"
-                      >
-                        <X size={16} />
-                      </button>
-                    </motion.div>
+                      
+                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleMoveImage(idx, 'up'); }}
+                          disabled={idx === 0}
+                          className="p-1 cursor-pointer rounded hover:bg-white/10 text-slate-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed"
+                          title="Move Up"
+                        >
+                          <ChevronUp size={16} />
+                        </button>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleMoveImage(idx, 'down'); }}
+                          disabled={idx === images.length - 1}
+                          className="p-1 cursor-pointer rounded hover:bg-white/10 text-slate-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed"
+                          title="Move Down"
+                        >
+                          <ChevronDown size={16} />
+                        </button>
+                        <div className="w-px h-4 bg-white/10 mx-1"></div>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleRemoveImage(idx); }}
+                          className="p-1 cursor-pointer rounded hover:bg-red-500/20 text-red-400"
+                          title="Remove Photo"
+                        >
+                          <X size={16} />
+                        </button>
+                      </div>
+                    </Reorder.Item>
                   ))}
-                </div>
+                </Reorder.Group>
               </AnimatePresence>
             )}
           </div>
@@ -267,13 +338,22 @@ export default function SlideMakerView({ triggerToast }) {
                 <CheckCircle2 size={16} />
                 Video Generated Successfully
               </div>
-              <button
-                onClick={handleOpenFolder}
-                className="cursor-pointer transition-colors"
-                style={{ fontSize: '0.8rem', fontWeight: 600, color: '#fff', background: '#34d399', padding: '4px 12px', borderRadius: '6px' }}
-              >
-                Open Folder
-              </button>
+              <div className="flex gap-2">
+                <button
+                  onClick={handleStartNew}
+                  className="cursor-pointer transition-colors"
+                  style={{ fontSize: '0.8rem', fontWeight: 600, color: '#34d399', background: 'rgba(52, 211, 153, 0.15)', padding: '4px 12px', borderRadius: '6px' }}
+                >
+                  Start New
+                </button>
+                <button
+                  onClick={handleOpenFolder}
+                  className="cursor-pointer transition-colors"
+                  style={{ fontSize: '0.8rem', fontWeight: 600, color: '#fff', background: '#34d399', padding: '4px 12px', borderRadius: '6px' }}
+                >
+                  Open Folder
+                </button>
+              </div>
             </div>
           )}
 

@@ -195,10 +195,13 @@ export default function ShareView({ myHostname, triggerToast }) {
       
       {/* Header and Title */}
       <div className="shrink-0 mb-6">
-        <h1 className="page-title" id="share-title">
-          Office AirDrop <span className="online-dot" title="Online"></span>
+        <h1 className="page-title flex items-center gap-[4px]" id="share-title">
+          <img src="/icon.png" alt="Logo" className="w-[44px] h-[44px]" style={{ borderRadius: '6px', transform: 'translateY(6px)', marginRight: '-10px' }} />
+          GrabCut 
+          <span className="online-dot mx-2" title="Online"></span>
+          <span className="text-[12px] text-indigo-300/40 tracking-[0.25em] font-bold mt-1 uppercase select-none">GRAB IT. CUT IT. SEND IT.</span>
         </h1>
-        <p className="page-sub">
+        <p className="page-sub" style={{ marginLeft: '38px' }}>
           {activeSegment === 'computers' ? 'Discovered computers on your network' : 'Send files from your iPhone or Android'}
         </p>
       </div>
@@ -315,7 +318,7 @@ export default function ShareView({ myHostname, triggerToast }) {
           </div>
           <h2 className="text-[18px] font-medium text-white mb-3">Looking for computers...</h2>
           <p className="text-[14px] text-white/40 max-w-[340px] leading-relaxed">
-            Make sure Office AirDrop is running on another PC on the same Wi-Fi or office network.
+            Make sure GrabCut is running on another PC on the same Wi-Fi or office network.
           </p>
           <button className="btn-ghost" onClick={handleScan} style={{ padding: '10px 24px', fontSize: '14px', marginTop: '28px' }}>
             <RefreshCw size={15} /> Scan network again

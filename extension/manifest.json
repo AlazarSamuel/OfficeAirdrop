@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Office AirDrop",
+  "name": "GrabCut",
   "version": "1.0.0",
-  "description": "Send video and audio links directly to the Office AirDrop desktop app for downloading.",
+  "description": "Send video and audio links directly to the GrabCut desktop app for downloading.",
   "permissions": [
     "activeTab",
     "contextMenus"
@@ -15,7 +15,7 @@
   },
   "action": {
     "default_popup": "popup.html",
-    "default_title": "Send to Office AirDrop"
+    "default_title": "Send to GrabCut"
   },
   "icons": {
     "16": "icon16.png",

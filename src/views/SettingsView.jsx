@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
-import { Folder, Trash2, Globe, ExternalLink, Check, Copy, FolderOpen } from 'lucide-react'
+import { Folder, Trash2, Globe, ExternalLink, Check, Copy, FolderOpen, Sparkles } from 'lucide-react'
 
-export default function SettingsView({ onSettingsChanged, triggerToast }) {
+export default function SettingsView({ onSettingsChanged, triggerToast, onLicenseChanged }) {
   const [displayName, setDisplayName] = useState('My PC')
   const [savePath, setSavePath] = useState('')
   const [autoAccept, setAutoAccept] = useState(false)
@@ -13,6 +13,10 @@ export default function SettingsView({ onSettingsChanged, triggerToast }) {
   const [showClearConfirm, setShowClearConfirm] = useState(false)
   const [showExtensionGuide, setShowExtensionGuide] = useState(false)
   const [copyText, setCopyText] = useState('Copy')
+
+  const [licenseStatus, setLicenseStatus] = useState({ isPro: false, expiresAt: null })
+  const [licenseKey, setLicenseKey] = useState('')
+  const [isActivating, setIsActivating] = useState(false)
 
   const handleCopy = () => {
     navigator.clipboard.writeText('chrome://extensions')
@@ -26,8 +30,9 @@ export default function SettingsView({ onSettingsChanged, triggerToast }) {
     if (window.electronAPI) {
       Promise.all([
         window.electronAPI.getSettings(),
-        window.electronAPI.getStartup ? window.electronAPI.getStartup() : Promise.resolve(false)
-      ]).then(([settings, startup]) => {
+        window.electronAPI.getStartup ? window.electronAPI.getStartup() : Promise.resolve(false),
+        window.electronAPI.getLicenseStatus ? window.electronAPI.getLicenseStatus() : Promise.resolve({ isPro: false })
+      ]).then(([settings, startup, lStatus]) => {
         const loaded = {
           displayName: settings.displayName || 'My PC',
           savePath: settings.savePath || '',
@@ -41,6 +46,7 @@ export default function SettingsView({ onSettingsChanged, triggerToast }) {
         setNotifications(loaded.notifications)
         setStartWithWindows(loaded.startWithWindows)
         setOriginalSettings(loaded)
+        setLicenseStatus(lStatus)
       })
     }
   }
@@ -86,6 +92,46 @@ export default function SettingsView({ onSettingsChanged, triggerToast }) {
     }
   }
 
+  const handleActivate = async () => {
+    if (!licenseKey.trim() || !window.electronAPI || !window.electronAPI.getLicenseStatus) return
+    setIsActivating(true)
+    try {
+      const result = await window.electronAPI.activateLicense(licenseKey.trim())
+      if (result.success) {
+        triggerToast('License activated successfully!')
+        const updatedStatus = await window.electronAPI.getLicenseStatus()
+        setLicenseStatus(updatedStatus)
+        if (onLicenseChanged) onLicenseChanged(updatedStatus)
+      } else {
+        triggerToast(`Activation failed: ${result.error}`)
+      }
+    } catch (err) {
+      triggerToast(`Activation error: ${err.message}`)
+    } finally {
+      setIsActivating(false)
+    }
+  }
+
+  const handleDeactivate = async () => {
+    if (!window.electronAPI || !window.electronAPI.getLicenseStatus) return
+    setIsActivating(true)
+    try {
+      const result = await window.electronAPI.deactivateLicense()
+      if (result.success) {
+        triggerToast('License deactivated.')
+        const updatedStatus = await window.electronAPI.getLicenseStatus()
+        setLicenseStatus(updatedStatus)
+        if (onLicenseChanged) onLicenseChanged(updatedStatus)
+      } else {
+        triggerToast(`Deactivation failed: ${result.error}`)
+      }
+    } catch (err) {
+      triggerToast(`Deactivation error: ${err.message}`)
+    } finally {
+      setIsActivating(false)
+    }
+  }
+
   // Toggle helper for accessibility
   const handleToggle = (e, setter, value) => {
     if (e.type === 'click' || (e.type === 'keydown' && (e.key === ' ' || e.key === 'Enter'))) {
@@ -119,7 +165,7 @@ export default function SettingsView({ onSettingsChanged, triggerToast }) {
 
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-slate-100 tracking-tight">Settings</h1>
-        <p className="text-slate-400 text-sm mt-1">Manage your Office AirDrop preferences.</p>
+        <p className="text-slate-400 text-sm mt-1">Manage your GrabCut preferences.</p>
       </div>
 
       <div className="settings-group mb-6 border-indigo-500/20 bg-indigo-500/5">
@@ -129,17 +175,74 @@ export default function SettingsView({ onSettingsChanged, triggerToast }) {
         <div className="setting-row" style={{ borderBottom: 'none' }}>
           <div className="setting-text">
             <div className="setting-label text-indigo-100">Install Browser Extension</div>
-            <div className="setting-desc text-indigo-200/70">Send video links instantly to Office AirDrop with a single click.</div>
+            <div className="setting-desc text-indigo-200/70">Send video links instantly to GrabCut with a single click.</div>
           </div>
           <div className="setting-control">
             <button 
-              className="px-4 py-2 rounded-lg text-sm bg-indigo-600 hover:bg-indigo-500 text-white font-medium transition-colors flex items-center gap-2 shadow-lg shadow-indigo-900/20"
+              className="download-btn"
               onClick={() => setShowExtensionGuide(true)}
             >
               How to Install <ExternalLink size={14} />
             </button>
           </div>
         </div>
+      </div>
+
+      <div className={`settings-group mb-6 ${licenseStatus.isPro ? 'border-green-500/20 bg-green-500/5' : 'border-amber-500/20 bg-amber-500/5'}`}>
+        <div className={`settings-group-header ${licenseStatus.isPro ? 'text-green-400 border-green-500/20' : 'text-amber-400 border-amber-500/20'} flex items-center gap-2`}>
+          License & Activation
+          {licenseStatus.isPro ? (
+            <span className="tier-badge badge-pro"><Sparkles size={12} /> Pro</span>
+          ) : (
+            <span className="tier-badge badge-free">Free</span>
+          )}
+        </div>
+        {licenseStatus.isPro ? (
+          <div className="setting-row" style={{ borderBottom: 'none' }}>
+            <div className="setting-text">
+              <div className="setting-label text-green-100">GrabCut Pro is Unlocked</div>
+              <div className="setting-desc text-green-200/70">
+                You have access to 4K exports, 8-connection parallel downloads, and the full intelligent trimmer.
+              </div>
+            </div>
+            <div className="setting-control flex gap-2">
+              <button 
+                className="deactivate-btn"
+                onClick={handleDeactivate}
+                disabled={isActivating}
+              >
+                {isActivating ? 'Deactivating...' : 'Deactivate License'}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="setting-row" style={{ borderBottom: 'none' }}>
+            <div className="setting-text">
+              <div className="setting-label text-amber-100">Activate GrabCut Pro</div>
+              <div className="setting-desc text-amber-200/70">
+                Enter your license key to unlock 4K video exports, advanced routing, and unlimited connections.
+              </div>
+            </div>
+            <div className="setting-control flex gap-2 flex-1 max-w-[300px]">
+              <input 
+                className="text-input flex-1" 
+                type="text" 
+                placeholder="XXXX-XXXX-XXXX-XXXX"
+                value={licenseKey} 
+                onChange={e => setLicenseKey(e.target.value)}
+                disabled={isActivating}
+                style={{ borderColor: 'rgba(245, 158, 11, 0.3)' }}
+              />
+              <button 
+                className="download-btn"
+                onClick={handleActivate}
+                disabled={isActivating || !licenseKey.trim()}
+              >
+                {isActivating ? 'Activating...' : 'Activate'}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="settings-group">
@@ -229,7 +332,7 @@ export default function SettingsView({ onSettingsChanged, triggerToast }) {
         <div className="setting-row">
           <div className="setting-text">
             <div className="setting-label">Start with Windows</div>
-            <div className="setting-desc">Run Office AirDrop silently in the background when you turn on your PC.</div>
+            <div className="setting-desc">Run GrabCut silently in the background when you turn on your PC.</div>
           </div>
           <div className="setting-control">
             <label className="toggle-wrap" aria-label="Toggle startup">

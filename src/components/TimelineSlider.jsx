@@ -25,6 +25,56 @@ function secondsToTimeString(seconds, forceHours = false) {
   }
 }
 
+const TimeInput = ({ label, seconds, maxSec, onCommit }) => {
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = Math.floor(seconds % 60);
+
+  const [localH, setLocalH] = useState('');
+  const [localM, setLocalM] = useState('');
+  const [localS, setLocalS] = useState('');
+
+  useEffect(() => {
+    setLocalH(h.toString().padStart(2, '0'));
+    setLocalM(m.toString().padStart(2, '0'));
+    setLocalS(s.toString().padStart(2, '0'));
+  }, [h, m, s]);
+
+  const commit = () => {
+    let tot = (parseInt(localH)||0) * 3600 + (parseInt(localM)||0) * 60 + (parseInt(localS)||0);
+    if (tot < 0) tot = 0;
+    if (tot > maxSec) tot = maxSec;
+    onCommit(tot);
+  };
+
+  const onBlur = () => commit();
+  const onKeyDown = (e) => { if (e.key === 'Enter') e.target.blur(); };
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
+      <span style={{ marginRight: '2px' }}>{label}</span>
+      
+      <input type="text" value={localH} 
+        className="time-chip font-mono" style={{ width: '28px', textAlign: 'center', padding: '4px 2px', outline: 'none' }}
+        onChange={e => setLocalH(e.target.value.replace(/\D/g, ''))}
+        onBlur={onBlur} onKeyDown={onKeyDown} onFocus={e => e.target.select()}
+      /> <span style={{ color: '#64748b', fontSize: '10px', fontWeight: 'bold', marginRight: '4px' }}>h</span>
+      
+      <input type="text" value={localM} 
+        className="time-chip font-mono" style={{ width: '28px', textAlign: 'center', padding: '4px 2px', outline: 'none' }}
+        onChange={e => setLocalM(e.target.value.replace(/\D/g, ''))}
+        onBlur={onBlur} onKeyDown={onKeyDown} onFocus={e => e.target.select()}
+      /> <span style={{ color: '#64748b', fontSize: '10px', fontWeight: 'bold', marginRight: '4px' }}>m</span>
+      
+      <input type="text" value={localS} 
+        className="time-chip font-mono" style={{ width: '28px', textAlign: 'center', padding: '4px 2px', outline: 'none' }}
+        onChange={e => setLocalS(e.target.value.replace(/\D/g, ''))}
+        onBlur={onBlur} onKeyDown={onKeyDown} onFocus={e => e.target.select()}
+      /> <span style={{ color: '#64748b', fontSize: '10px', fontWeight: 'bold' }}>s</span>
+    </div>
+  );
+};
+
 export default function TimelineSlider({ duration, startTimeStr, endTimeStr, onChange, onScrub }) {
   const trackRef = useRef(null);
   const [isDragging, setIsDragging] = useState(null); // 'left' or 'right'
@@ -113,6 +163,17 @@ export default function TimelineSlider({ duration, startTimeStr, endTimeStr, onC
     }
   }, [isDragging, handlePointerMove, handlePointerUp]);
 
+  const [startInput, setStartInput] = useState('');
+  const [endInput, setEndInput] = useState('');
+
+  useEffect(() => {
+    if (!isDragging) setStartInput(secondsToTimeString(startSec, duration >= 3600));
+  }, [startSec, duration, isDragging]);
+
+  useEffect(() => {
+    if (!isDragging) setEndInput(secondsToTimeString(endSec, duration >= 3600));
+  }, [endSec, duration, isDragging]);
+
   if (!duration) return null;
 
   const leftPercent = (startSec / duration) * 100;
@@ -150,17 +211,33 @@ export default function TimelineSlider({ duration, startTimeStr, endTimeStr, onC
       </div>
       
       <div className="trimmer-inputs">
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <span>Start:</span>
-          <span className="font-mono time-chip">{secondsToTimeString(startSec, true)}</span>
-        </div>
+        <TimeInput 
+          label="Start:" 
+          seconds={startSec} 
+          maxSec={endSec - 1} 
+          onCommit={(sec) => {
+            const forceHours = duration >= 3600;
+            setStartSec(sec);
+            if (onChange) onChange(secondsToTimeString(sec, forceHours), secondsToTimeString(endSec, forceHours));
+            if (onScrub) onScrub(sec);
+          }} 
+        />
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
           <span>Selected: <strong style={{ color: '#cbd5e1' }}>{secondsToTimeString(endSec - startSec)}</strong></span>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <span>End:</span>
-          <span className="font-mono time-chip">{secondsToTimeString(endSec, true)}</span>
-        </div>
+        <TimeInput 
+          label="End:" 
+          seconds={endSec} 
+          maxSec={duration} 
+          onCommit={(sec) => {
+            // Ensure end time is at least startSec + 1
+            const validSec = Math.max(sec, startSec + 1);
+            const forceHours = duration >= 3600;
+            setEndSec(validSec);
+            if (onChange) onChange(secondsToTimeString(startSec, forceHours), secondsToTimeString(validSec, forceHours));
+            if (onScrub) onScrub(validSec);
+          }} 
+        />
       </div>
     </div>
   );

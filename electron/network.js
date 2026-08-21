@@ -255,7 +255,7 @@ class NetworkManager {
 <body>
   
   <div style="margin-bottom: 2rem; text-align: center;">
-    <h1 style="font-size: 1.5rem; margin: 0; font-weight: 700; color: white;">Office AirDrop</h1>
+    <h1 style="font-size: 1.5rem; margin: 0; font-weight: 700; color: white;">GrabCut</h1>
     <p style="margin: 4px 0 0 0; font-size: 0.85rem; color: rgba(255,255,255,0.5);">Connected to \${this.displayName}</p>
   </div>
 

@@ -8,13 +8,14 @@ import { fileURLToPath } from 'url'
 import NetworkManager from './network.js'
 import downloader from './downloader.js'
 import slidemaker from './slidemaker.js'
+import * as licensing from './licensing.js'
 import { startLocalServer, updateProgress, progressCache } from './server.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
 if (process.env.VITE_DEV_SERVER_URL) {
-  app.setPath('userData', path.join(app.getPath('appData'), 'office-share-dev'))
+  app.setPath('userData', path.join(app.getPath('appData'), 'grabcut-dev'))
 }
 
 let mainWindow
@@ -23,6 +24,8 @@ let tray = null
 let isQuitting = false
 
 global.proxyHeadersCache = new Map();
+global.isPro = false;
+global.licenseExpiresAt = null;
 
 // We no longer manually spoof the User-Agent, because spoofing it causes YouTube's WAF 
 // to detect a TLS fingerprint mismatch. We let Electron use its authentic Chromium UA.
@@ -157,6 +160,43 @@ function createWindow() {
 
   mainWindow = new BrowserWindow(windowOptions)
 
+  // Spoof Origin/Referer for YouTube embed requests to bypass "playback on other websites disabled" (Error 152-4)
+  // This makes YouTube's server think the embed is loaded from youtube.com itself.
+  session.defaultSession.webRequest.onBeforeSendHeaders(
+    { urls: ['*://*.youtube.com/*', '*://*.googlevideo.com/*', '*://*.youtube-nocookie.com/*'] },
+    (details, callback) => {
+      // Only modify headers for webview requests (not our main app)
+      if (details.resourceType === 'subFrame' || details.webContentsId !== mainWindow?.webContents?.id) {
+        details.requestHeaders['Origin'] = 'https://www.youtube.com'
+        details.requestHeaders['Referer'] = 'https://www.youtube.com/'
+      }
+      callback({ requestHeaders: details.requestHeaders })
+    }
+  )
+
+  // Also handle response headers to allow embedding
+  session.defaultSession.webRequest.onHeadersReceived(
+    { urls: ['*://*.youtube.com/*'] },
+    (details, callback) => {
+      const headers = details.responseHeaders
+      // Remove X-Frame-Options to allow embedding
+      delete headers['X-Frame-Options']
+      delete headers['x-frame-options']
+      // Relax Content-Security-Policy frame-ancestors
+      if (headers['Content-Security-Policy']) {
+        headers['Content-Security-Policy'] = headers['Content-Security-Policy'].map(
+          v => v.replace(/frame-ancestors[^;]*/gi, 'frame-ancestors *')
+        )
+      }
+      if (headers['content-security-policy']) {
+        headers['content-security-policy'] = headers['content-security-policy'].map(
+          v => v.replace(/frame-ancestors[^;]*/gi, 'frame-ancestors *')
+        )
+      }
+      callback({ responseHeaders: headers })
+    }
+  )
+
   // Video preview is handled entirely by the local proxy in server.js
   // because Chromium's <video> tag bypasses webRequest interceptors in this configuration.
 
@@ -177,7 +217,7 @@ function createWindow() {
   // Create Tray
   tray = new Tray(nativeImage.createFromPath(iconPath))
   const contextMenu = Menu.buildFromTemplate([
-    { label: 'Show Office AirDrop', click: () => mainWindow.show() },
+    { label: 'Show GrabCut', click: () => mainWindow.show() },
     { type: 'separator' },
     { 
       label: 'Quit', 
@@ -187,7 +227,7 @@ function createWindow() {
       } 
     }
   ])
-  tray.setToolTip('Office AirDrop')
+  tray.setToolTip('GrabCut')
   tray.setContextMenu(contextMenu)
   
   tray.on('click', () => {
@@ -227,15 +267,18 @@ if (!gotTheLock) {
   
   if (process.defaultApp) {
     if (process.argv.length >= 2) {
-      app.setAsDefaultProtocolClient('officeairdrop', process.execPath, [path.resolve(process.argv[1])])
+      app.setAsDefaultProtocolClient('grabcut', process.execPath, [path.resolve(process.argv[1])])
     }
   } else {
-    app.setAsDefaultProtocolClient('officeairdrop')
+    app.setAsDefaultProtocolClient('grabcut')
   }
 
-  app.whenReady().then(() => {
+  app.whenReady().then(async () => {
+    // Run offline license verification on boot
+    await licensing.verifyLicense()
+
     if (process.platform === 'win32') {
-      app.setAppUserModelId('com.officeshare.app')
+      app.setAppUserModelId('com.grabcut.app')
     }
 
     // Initialize start with Windows on very first launch
@@ -355,6 +398,30 @@ app.on('window-all-closed', () => {
 
 // ── IPC Handlers ──────────────────────────────────────────
 
+// Licensing
+ipcMain.handle('get-license-status', () => {
+  return {
+    isPro: global.isPro,
+    expiresAt: global.licenseExpiresAt
+  }
+})
+
+ipcMain.handle('activate-license', async (event, key) => {
+  try {
+    return await licensing.activateLicense(key)
+  } catch (err) {
+    return { success: false, error: err.message }
+  }
+})
+
+ipcMain.handle('deactivate-license', async () => {
+  try {
+    return await licensing.deactivateLicense()
+  } catch (err) {
+    return { success: false, error: err.message }
+  }
+})
+
 // File sending
 ipcMain.on('send-files', (event, peerId, filePaths) => {
   console.log(`Sending files to ${peerId}:`, filePaths)
@@ -372,16 +439,26 @@ ipcMain.handle('stage-file-for-phone', (event, filePath) => {
 })
 
 // File picker
-ipcMain.handle('pick-files', async () => {
+ipcMain.handle('pick-files', async (event, options) => {
+  const isImagesDefault = options && options.type === 'images';
+  const filters = isImagesDefault
+    ? [
+        { name: 'Images', extensions: ['jpg', 'jpeg', 'png', 'gif', 'webp'] },
+        { name: 'All Files', extensions: ['*'] },
+        { name: 'Videos', extensions: ['mp4', 'mkv', 'avi', 'mov', 'wmv'] },
+        { name: 'Documents', extensions: ['pdf', 'docx', 'xlsx', 'pptx', 'txt'] },
+      ]
+    : [
+        { name: 'All Files', extensions: ['*'] },
+        { name: 'Videos', extensions: ['mp4', 'mkv', 'avi', 'mov', 'wmv'] },
+        { name: 'Images', extensions: ['jpg', 'jpeg', 'png', 'gif', 'webp'] },
+        { name: 'Documents', extensions: ['pdf', 'docx', 'xlsx', 'pptx', 'txt'] },
+      ];
+
   const result = await dialog.showOpenDialog(mainWindow, {
     title: 'Select files to send',
     properties: ['openFile', 'multiSelections'],
-    filters: [
-      { name: 'All Files', extensions: ['*'] },
-      { name: 'Videos', extensions: ['mp4', 'mkv', 'avi', 'mov', 'wmv'] },
-      { name: 'Images', extensions: ['jpg', 'jpeg', 'png', 'gif', 'webp'] },
-      { name: 'Documents', extensions: ['pdf', 'docx', 'xlsx', 'pptx', 'txt'] },
-    ]
+    filters: filters
   })
   if (result.canceled) return null
   return result.filePaths
@@ -562,18 +639,45 @@ ipcMain.handle('fetch-video-info', async (event, url) => {
   return info
 })
 
+ipcMain.handle('start-live-clip', async (event, { url, durationSec, totalDurationSec, title, id }) => {
+  const settings = loadSettings()
+  downloader.startLiveClip(url, durationSec, totalDurationSec, title, id, settings.savePath || app.getPath('downloads'),
+    (progress) => {
+      updateProgress(id, { ...progress, status: 'downloading' })
+      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('download-progress', progress)
+    },
+    (result) => {
+      updateProgress(id, { ...result, status: 'complete', percent: 100, speed: 'Done' })
+      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('download-complete', result)
+    },
+    (error) => {
+      updateProgress(id, { error: error.toString(), status: 'error' })
+      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('download-error', error)
+    }
+  )
+  return true
+})
+
+
 ipcMain.handle('save-download-history', (event, history) => {
   fs.writeFileSync(dlHistoryPath, JSON.stringify(history, null, 2))
   return true
 })
 
 // Slideshow
-ipcMain.handle('create-slideshow', (event, images, duration) => {
+ipcMain.handle('create-slideshow', async (event, images, duration, transition) => {
   const settings = loadSettings()
+  const outputDir = settings.savePath || app.getPath('downloads')
+  
+  if (!fs.existsSync(outputDir)) {
+    fs.mkdirSync(outputDir, { recursive: true })
+  }
+
   slidemaker.createSlideshow(
     images,
     duration,
-    settings.savePath || app.getPath('downloads'),
+    outputDir,
+    transition,
     (progress) => {
       if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.webContents.send('slideshow-progress', progress)

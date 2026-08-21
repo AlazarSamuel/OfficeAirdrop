@@ -100,7 +100,7 @@ async function init() {
     
     // Fire the custom URI to wake the app
     const iframe = document.createElement('iframe');
-    iframe.src = 'officeairdrop://wake';
+    iframe.src = 'grabcut://wake';
     iframe.style.display = 'none';
     document.body.appendChild(iframe);
     

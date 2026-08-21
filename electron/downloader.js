@@ -2,8 +2,10 @@ import { spawn } from 'child_process';
 import path from 'path';
 import fs from 'fs';
 import { app } from 'electron';
+import * as licensing from './licensing.js';
 import { extractStreams } from './extractor.js';
 import { ParallelDownloader } from './parallel_downloader.js';
+import { processLiveClip } from './live_chunk_downloader.js';
 
 const activeDownloads = new Map();
 
@@ -52,6 +54,13 @@ function parseSeconds(timestamp) {
 }
 
 function resolveRoute(meta, startTime, endTime, downloadDir) {
+  // --- Gate 0: Pro Trimmer Limits ---
+  const proToken = licensing.getProToken();
+  if (!proToken && (startTime || endTime)) {
+    console.log('[Downloader] Cryptographic binding failed. Forcing Network-Cut trimmer');
+    return 'network-cut';
+  }
+
   // --- Gate 1: No trim requested, always parallel ---
   if (!startTime && !endTime) return 'parallel';
 
@@ -80,6 +89,13 @@ function resolveRoute(meta, startTime, endTime, downloadDir) {
 }
 
 async function downloadVideo(url, id, quality, startTime, endTime, savePath, onProgress, onComplete, onError) {
+  // Enforce Free Tier Quality Limits
+  const proToken = licensing.getProToken();
+  if (!proToken && quality === '4K') {
+    console.log('[Downloader] Cryptographic binding failed. Downgrading 4K to 1080p');
+    quality = '1080p';
+  }
+
   const downloadDir = ensureDir(savePath);
   url = url.trim();
   const tempDir = app.getPath('temp');
@@ -91,7 +107,12 @@ async function downloadVideo(url, id, quality, startTime, endTime, savePath, onP
     onProgress({ id, title: 'Extracting streams...', percent: 0, speed: '-', totalSize: '-', eta: '-' });
     
     const meta = await extractStreams(url, quality);
-    let finalTitle = meta.title.replace(/[\\/:*?"<>|]/g, '');
+    const now = new Date();
+    const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}-${String(now.getMinutes()).padStart(2, '0')}-${String(now.getSeconds()).padStart(2, '0')}`;
+    let finalTitle = `${meta.title.replace(/[\\/:*?"<>|]/g, '')} ${dateStr}`;
+    if (startTime || endTime) {
+      finalTitle += ' CLIP';
+    }
     
     if (abortController.signal.aborted) throw new Error('Cancelled');
 
@@ -212,7 +233,20 @@ async function downloadVideo(url, id, quality, startTime, endTime, savePath, onP
     }
     // =================================
     
-    onComplete({ id, title: finalTitle, success: true, path: finalOutputPath });
+    let finalSizeMB = 'Unknown';
+    try {
+      const stat = fs.statSync(finalOutputPath);
+      finalSizeMB = (stat.size / 1024 / 1024).toFixed(2) + ' MB';
+    } catch(e) {}
+
+    let actualDuration = 0;
+    if (meta.duration) {
+      const startSec = startTime ? parseSeconds(startTime) : 0;
+      const endSec = endTime ? parseSeconds(endTime) : meta.duration;
+      actualDuration = Math.max(0, endSec - startSec);
+    }
+    
+    onComplete({ id, title: finalTitle, success: true, path: finalOutputPath, finalSize: finalSizeMB, duration: actualDuration });
 
   } catch (error) {
     if (error.message === 'Cancelled' || abortController.signal.aborted) {
@@ -300,7 +334,9 @@ function formatSpeed(bytesPerSec) {
 }
 
 async function doParallelDownload(meta, tempDir, downloadDir, finalTitle, id, onProgress, abortController, ext = 'mp4') {
-  const downloader = new ParallelDownloader({ connections: 8 });
+  const proToken = licensing.getProToken();
+  const numConnections = proToken ? 8 : 2;
+  const downloader = new ParallelDownloader({ connections: numConnections });
   
   const videoStream = meta.streams.find(s => s.type === 'video' || s.type === 'combined') || meta.streams[0];
   const audioStream = meta.streams.find(s => s.type === 'audio');
@@ -395,6 +431,7 @@ async function doParallelDownload(meta, tempDir, downloadDir, finalTitle, id, on
 
 async function doNetworkCut(meta, startTime, endTime, tempDir, downloadDir, finalTitle, id, onProgress, abortController, ext = 'mp4') {
   const targetStream = meta.streams.find(s => s.type === 'combined') || meta.streams.find(s => s.type === 'video') || meta.streams[0];
+  const audioStream = meta.streams.find(s => s.type === 'audio');
   
   const endSec = endTime ? timeToSeconds(endTime) : 999999;
   const startSec = startTime ? timeToSeconds(startTime) : 0;
@@ -407,17 +444,24 @@ async function doNetworkCut(meta, startTime, endTime, tempDir, downloadDir, fina
   const finalDest = path.join(downloadDir, `${finalTitle}.${ext}`);
   
   const args = [];
-  if (startTime) args.push('-ss', startTime);
   
-  if (targetStream.http_headers) {
-    let headerStr = '';
-    for (const [k, v] of Object.entries(targetStream.http_headers)) {
-      headerStr += `${k}: ${v}\r\n`;
+  const addStream = (stream) => {
+    if (startTime) args.push('-ss', startTime);
+    if (stream.http_headers) {
+      let headerStr = '';
+      for (const [k, v] of Object.entries(stream.http_headers)) {
+        headerStr += `${k}: ${v}\r\n`;
+      }
+      if (headerStr) args.push('-headers', headerStr);
     }
-    if (headerStr) args.push('-headers', headerStr);
+    args.push('-i', stream.url);
+  };
+
+  addStream(targetStream);
+  if (audioStream && targetStream.type !== 'combined') {
+    addStream(audioStream);
   }
   
-  args.push('-i', targetStream.url);
   if (endTime && expectedDurationSec > 0 && expectedDurationSec < 999999) {
     args.push('-t', expectedDurationSec.toString());
   }
@@ -588,11 +632,62 @@ function resetEngine() {
   return true;
 }
 
+function getFfmpegPath() {
+  return app.isPackaged
+    ? path.join(process.resourcesPath, 'bin', 'ffmpeg.exe')
+    : path.join(app.getAppPath(), 'bin', 'ffmpeg.exe');
+}
+
+function formatDate() {
+  const d = new Date();
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  const hh = String(d.getHours()).padStart(2, '0');
+  const min = String(d.getMinutes()).padStart(2, '0');
+  const ss = String(d.getSeconds()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}_${hh}-${min}-${ss}`;
+}
+
+function startLiveClip(url, durationSec, totalDurationSec, title, id, savePath, onProgress, onComplete, onError) {
+  const safeTitle = title.replace(/[\\/:*?"<>|]/g, '');
+  const outPath = path.join(savePath, `${safeTitle}_CLIP_${formatDate()}_${durationSec}s.mkv`);
+  
+  onProgress({ id, title: 'Preparing IDM Live Clip...', percent: 0, speed: '-', totalSize: '-', eta: '-' });
+
+  const ytDlpPath = app.isPackaged
+    ? path.join(process.resourcesPath, 'bin', 'yt-dlp.exe')
+    : path.join(app.getAppPath(), 'bin', 'yt-dlp.exe');
+    
+  const ffmpegPath = app.isPackaged
+    ? path.join(process.resourcesPath, 'bin', 'ffmpeg.exe')
+    : path.join(app.getAppPath(), 'bin', 'ffmpeg.exe');
+
+  const abortController = new AbortController();
+  activeDownloads.set(id, { abortController });
+
+  processLiveClip(url, durationSec, ytDlpPath, ffmpegPath, outPath, (percent, msg) => {
+    onProgress({ id, title: msg, percent: percent, speed: '-', totalSize: '-', eta: '-' });
+  }).then((finalPath) => {
+    activeDownloads.delete(id);
+    let finalSizeMB = 'Unknown';
+    try {
+      const stat = fs.statSync(finalPath);
+      finalSizeMB = (stat.size / 1024 / 1024).toFixed(2) + ' MB';
+    } catch(e) {}
+    onComplete({ id, path: finalPath, title: path.basename(finalPath), finalSize: finalSizeMB, duration: durationSec });
+  }).catch((err) => {
+    activeDownloads.delete(id);
+    onError(err);
+  });
+}
+
 import { extractStreams as fetchVideoInfo } from './extractor.js';
 
 export default {
   downloadVideo,
   cancelDownload,
   resetEngine,
-  fetchVideoInfo
+  fetchVideoInfo,
+  startLiveClip
 };

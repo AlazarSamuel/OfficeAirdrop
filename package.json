@@ -1,13 +1,13 @@
 {
-  "name": "office-share",
+  "name": "grabcut",
   "private": true,
   "version": "0.0.1",
   "type": "module",
   "main": "dist-electron/main.js",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
-    "package": "vite build && electron-builder",
+    "build": "vite build && node build.js",
+    "package": "vite build && node build.js && electron-builder",
     "lint": "oxlint",
     "preview": "vite preview"
   },
@@ -17,6 +17,7 @@
     "formidable": "^3.5.4",
     "lucide-react": "^1.31.0",
     "motion": "^13.1.0",
+    "node-machine-id": "^1.1.12",
     "qrcode.react": "^4.2.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
@@ -31,6 +32,7 @@
     "autoprefixer": "^10.5.4",
     "electron": "^43.4.0",
     "electron-builder": "^26.15.3",
+    "javascript-obfuscator": "^5.5.0",
     "oxlint": "^1.75.0",
     "postcss": "^8.5.26",
     "tailwindcss": "^4.3.3",
@@ -39,8 +41,9 @@
     "vite-plugin-electron-renderer": "^1.0.0"
   },
   "build": {
-    "appId": "com.officeshare.app",
-    "productName": "Office AirDrop",
+    "appId": "com.grabcut.app",
+    "productName": "GrabCut",
+    "asar": true,
     "directories": {
       "output": "release"
     },
@@ -55,7 +58,7 @@
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
-      "shortcutName": "Office AirDrop"
+      "shortcutName": "GrabCut"
     }
   }
 }

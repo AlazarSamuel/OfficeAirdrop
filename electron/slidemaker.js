@@ -2,6 +2,7 @@ import { spawn } from 'child_process'
 import path from 'path'
 import fs from 'fs'
 import { app } from 'electron'
+import * as licensing from './licensing.js'
 
 const ffmpegPath = app.isPackaged
   ? path.join(process.resourcesPath, 'bin', 'ffmpeg.exe')
@@ -16,7 +17,7 @@ const ffmpegPath = app.isPackaged
  * @param {function} onComplete - Callback when done (returns output path).
  * @param {function} onError - Callback for errors.
  */
-function createSlideshow(images, duration, outputDir, onProgress, onComplete, onError) {
+function createSlideshow(images, duration, outputDir, transition, onProgress, onComplete, onError) {
   if (!images || images.length === 0) {
     onError('No images provided.')
     return
@@ -28,7 +29,7 @@ function createSlideshow(images, duration, outputDir, onProgress, onComplete, on
   const finalDest = path.join(outputDir, `Slideshow_${id}.mp4`)
 
   try {
-    const fps = 25
+    const fps = 30
     const slideDuration = duration // e.g. 3
     const fadeDuration = 0.5
     const framesPerSlide = Math.floor(slideDuration * fps)
@@ -40,6 +41,9 @@ function createSlideshow(images, duration, outputDir, onProgress, onComplete, on
     images.forEach(img => {
       args.push('-i', img)
     })
+    // Add silent dummy audio track for NLE compatibility
+    args.push('-f', 'lavfi', '-i', 'anullsrc=channel_layout=stereo:sample_rate=48000')
+    const audioInputIndex = images.length
 
     // Build filter graph
     let previousOutput = ''
@@ -67,7 +71,30 @@ function createSlideshow(images, duration, outputDir, onProgress, onComplete, on
         const currentOut = `[out${i}]`
         const nextOutput = i === images.length - 1 ? `[final]` : `[x${i}]`
         
-        filterComplex += `${previousOutput}${currentOut}xfade=transition=fade:duration=${fadeDuration}:offset=${offset}${nextOutput};\n`
+        let actualTransition = transition || 'fade'
+        
+        // --- Gate 1: Cryptographic Feature Binding ---
+        const proToken = licensing.getProToken();
+        if (!proToken && actualTransition !== 'fade') {
+          console.log('[SlideMaker] Cryptographic binding failed (Missing Token). Forcing basic fade.');
+          actualTransition = 'fade';
+        }
+        
+        if (actualTransition === 'random') {
+          const randOptions = [
+            'fade', 'wipeleft', 'wiperight', 'wipeup', 'wipedown', 
+            'slideleft', 'slideright', 'slideup', 'slidedown', 
+            'circlecrop', 'rectcrop', 'distance', 'radial', 
+            'smoothleft', 'smoothright', 'smoothup', 'smoothdown', 
+            'circleopen', 'circleclose', 'vertopen', 'vertclose', 
+            'horzopen', 'horzclose', 'dissolve', 'pixelize', 
+            'diagbl', 'diagbr', 'diagtl', 'diagtr', 
+            'hlslice', 'hrslice', 'vuslice', 'vdslice'
+          ]
+          actualTransition = randOptions[Math.floor(Math.random() * randOptions.length)]
+        }
+        
+        filterComplex += `${previousOutput}${currentOut}xfade=transition=${actualTransition}:duration=${fadeDuration}:offset=${offset}${nextOutput};\n`
         previousOutput = nextOutput
       }
     })
@@ -86,10 +113,19 @@ function createSlideshow(images, duration, outputDir, onProgress, onComplete, on
     const mapLabel = images.length === 1 ? '[out0]' : '[final]'
     args.push(
       '-map', mapLabel,
+      '-map', `${audioInputIndex}:a`, // Inject the silent audio
       '-c:v', 'libx264',
-      '-preset', 'ultrafast',
+      '-preset', 'fast', // Balance between speed and quality
+      '-crf', '18', // Visually lossless quality
+      '-g', '30', // Keyframe every 30 frames (buttery smooth scrubbing in Premiere)
       '-pix_fmt', 'yuv420p',
-      '-r', `${fps}`,
+      '-colorspace', 'bt709', // Premiere HD color tagging
+      '-color_primaries', 'bt709',
+      '-color_trc', 'bt709',
+      '-c:a', 'aac', // Audio codec
+      '-b:a', '128k',
+      '-shortest', // Cut off the infinite dummy audio when the video ends
+      '-r', `${fps}`, // Force 30 CFR
       finalDest
     )
 

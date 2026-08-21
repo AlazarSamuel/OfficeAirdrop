@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { Share, History, Settings, Smartphone, Minus, Square, X, CheckCircle2, Download, ArrowUp, Pause, Play, Video, FileText, Clock, Film } from 'lucide-react'
+import { Share, History, Settings, Smartphone, Minus, Square, X, CheckCircle2, Download, ArrowUp, Pause, Play, Video, FileText, Clock, Film, Sparkles } from 'lucide-react'
 import ShareView from './views/ShareView'
 import HistoryView from './views/HistoryView'
 import SettingsView from './views/SettingsView'
@@ -16,6 +16,7 @@ function App() {
   const [countdown, setCountdown] = useState(30)
 
   const [unreadCount, setUnreadCount] = useState(0)
+  const [isPro, setIsPro] = useState(false)
 
   const formatBytes = (bytes) => {
     if (!bytes) return '0 B'
@@ -39,6 +40,11 @@ function App() {
       window.electronAPI.getSettings().then(settings => {
         setMyHostname(settings.displayName)
       })
+      if (window.electronAPI.getLicenseStatus) {
+        window.electronAPI.getLicenseStatus().then(status => {
+          setIsPro(status.isPro)
+        })
+      }
       if (window.electronAPI.onTransferRequest) {
         unsubs.push(window.electronAPI.onTransferRequest((request) => {
           setIncomingTransfer(request)
@@ -166,9 +172,14 @@ function App() {
     <div className="app-shell relative overflow-hidden">
       {/* Title bar */}
       <div className="title-bar">
-        <div className="flex items-center gap-[8px] flex-1 app-region-drag pl-2">
-          <img src="/icon.png" alt="Logo" className="w-[18px] h-[18px] opacity-90" />
-          <span className="title-bar-label font-medium" style={{ paddingLeft: 0, flex: 'none' }}>Office AirDrop</span>
+        <div className="flex items-center gap-[2px] flex-1 app-region-drag pl-2">
+          <img src="/icon.png" alt="Logo" className="w-[24px] h-[24px]" style={{ marginRight: '-4px', transform: 'translateY(4px)' }} />
+          <span className="title-bar-label font-medium" style={{ paddingLeft: 0, flex: 'none', marginRight: '6px' }}>GrabCut</span>
+          {isPro ? (
+            <span className="tier-badge badge-pro"><Sparkles size={12} /> Pro</span>
+          ) : (
+            <span className="tier-badge badge-free">Free</span>
+          )}
         </div>
       </div>
 
@@ -385,20 +396,24 @@ function App() {
         {/* Content */}
         <main className="content app-region-no-drag relative">
           <div className="content-inner">
-            <div style={{ display: activeTab === 'share' ? 'block' : 'none', height: '100%' }}>
+            <div style={{ display: activeTab === 'share' ? 'flex' : 'none', flex: 1, flexDirection: 'column', minHeight: 0 }}>
               <ShareView myHostname={myHostname} triggerToast={triggerToast} />
             </div>
-            <div style={{ display: activeTab === 'history' ? 'block' : 'none', height: '100%' }}>
+            <div style={{ display: activeTab === 'history' ? 'flex' : 'none', flex: 1, flexDirection: 'column', minHeight: 0 }}>
               <HistoryView triggerToast={triggerToast} />
             </div>
-            <div style={{ display: activeTab === 'downloader' ? 'block' : 'none', height: '100%' }}>
+            <div style={{ display: activeTab === 'downloader' ? 'flex' : 'none', flex: 1, flexDirection: 'column', minHeight: 0 }}>
               <DownloaderView triggerToast={triggerToast} />
             </div>
-            <div style={{ display: activeTab === 'slidemaker' ? 'block' : 'none', height: '100%' }}>
+            <div style={{ display: activeTab === 'slidemaker' ? 'flex' : 'none', flex: 1, flexDirection: 'column', minHeight: 0 }}>
               <SlideMakerView triggerToast={triggerToast} />
             </div>
-            <div style={{ display: activeTab === 'settings' ? 'block' : 'none', height: '100%' }}>
-              <SettingsView onSettingsChanged={(s) => setMyHostname(s.displayName)} triggerToast={triggerToast} />
+            <div style={{ display: activeTab === 'settings' ? 'flex' : 'none', flex: 1, flexDirection: 'column', minHeight: 0 }}>
+              <SettingsView 
+                onSettingsChanged={(s) => setMyHostname(s.displayName)} 
+                triggerToast={triggerToast} 
+                onLicenseChanged={(status) => setIsPro(status.isPro)}
+              />
             </div>
           </div>
           

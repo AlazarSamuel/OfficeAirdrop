@@ -1,6 +1,10 @@
 const { contextBridge, ipcRenderer } = require('electron')
 
-contextBridge.exposeInMainWorld('electronAPI', {
+contextBridge.exposeInMainWorld('electronAPI', Object.freeze({
+  // Licensing
+  getLicenseStatus: () => ipcRenderer.invoke('get-license-status'),
+  activateLicense: (key) => ipcRenderer.invoke('activate-license', key),
+  deactivateLicense: () => ipcRenderer.invoke('deactivate-license'),
   // Peers
   onDiscoveredPeers: (callback) => {
     const handler = (e, peers) => callback(peers)
@@ -15,7 +19,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // File operations
   sendFiles: (peerId, files) => ipcRenderer.send('send-files', peerId, files),
   stageFileForPhone: (filePath) => ipcRenderer.invoke('stage-file-for-phone', filePath),
-  pickFiles: () => ipcRenderer.invoke('pick-files'),
+  pickFiles: (options) => ipcRenderer.invoke('pick-files', options),
   pickFolder: () => ipcRenderer.invoke('pick-folder'),
   openExternal: (url) => ipcRenderer.invoke('open-external', url),
   openExtensionFolder: () => ipcRenderer.invoke('open-extension-folder'),
@@ -85,6 +89,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getDownloadHistory: () => ipcRenderer.invoke('get-download-history'),
   saveDownloadHistory: (history) => ipcRenderer.invoke('save-download-history', history),
   fetchVideoInfo: (url) => ipcRenderer.invoke('fetch-video-info', url),
+  startLiveClip: (url, durationSec, totalDurationSec, title, id) => ipcRenderer.invoke('start-live-clip', { url, durationSec, totalDurationSec, title, id }),
   onDownloadProgress: (callback) => {
     const handler = (e, data) => callback(data)
     ipcRenderer.on('download-progress', handler)
@@ -105,7 +110,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
 
   // Slideshow
-  createSlideshow: (images, duration) => ipcRenderer.invoke('create-slideshow', images, duration),
+  createSlideshow: (images, duration, transition) => ipcRenderer.invoke('create-slideshow', images, duration, transition),
   onSlideshowProgress: (callback) => {
     ipcRenderer.on('slideshow-progress', (event, data) => callback(data))
     return () => ipcRenderer.removeAllListeners('slideshow-progress')
@@ -154,4 +159,4 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // File system
   openFile: (filePath) => ipcRenderer.invoke('open-file', filePath),
   openFolder: (filePath) => ipcRenderer.invoke('open-folder', filePath),
-})
+}))

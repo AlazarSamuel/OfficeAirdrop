@@ -17,7 +17,7 @@ async function sendUrlToDesktop(url) {
       console.error("Failed to send URL to desktop app.");
     }
   } catch (error) {
-    console.error("Network error. Is the Office AirDrop app running?", error);
+    console.error("Network error. Is the GrabCut app running?", error);
   }
 }
 
@@ -25,7 +25,7 @@ async function sendUrlToDesktop(url) {
 chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.create({
     id: "send-to-airdrop",
-    title: "Send Video Link to Office AirDrop",
+    title: "Send Video Link to GrabCut",
     contexts: ["page", "video", "link"]
   });
 });

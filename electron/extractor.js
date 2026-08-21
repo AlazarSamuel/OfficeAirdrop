@@ -38,6 +38,11 @@ function doExtract(url, quality) {
       formatString = 'bestaudio[ext=m4a]/bestaudio/best';
     }
 
+    // For live streams, we relax the format string to allow m3u8 and non-mp4 containers
+    // since yt-dlp might fail if it strictly expects mp4/m4a on a live HLS stream.
+    // We add a fallback to 'bestvideo+bestaudio/best' which is container-agnostic.
+    formatString = `${formatString}/bestvideo+bestaudio/best`;
+
     const argsArray = [
       url,
       '--dump-json',
@@ -78,15 +83,26 @@ function doExtract(url, quality) {
       if (code === 0 && stdout) {
         try {
           const info = JSON.parse(stdout);
+          let duration = info.duration || 0;
+          let manifestUrl = info.url || (info.requested_formats && info.requested_formats.length > 0 ? info.requested_formats[0].url : '');
+          
+          if (!duration && info.is_live && manifestUrl) {
+            const match = manifestUrl.match(/(?:manifest_duration|playlist_duration)\/(\d+)/);
+            if (match) duration = parseInt(match[1]);
+          }
+          
           const result = {
             id: info.id || '',
             title: info.title || 'Unknown Title',
             thumbnail: info.thumbnail || '',
-            duration: info.duration || 0,
+            duration: duration,
             uploader: info.uploader || info.channel || 'Unknown Channel',
             extractor: info.extractor_key || 'Unknown Source',
             filesize: info.filesize || info.filesize_approx || 0,
             originalUrl: info.original_url || info.webpage_url || url,
+            is_live: info.is_live === true,
+            cachedAt: Date.now(),
+            manifestUrl: manifestUrl,
             streams: [],
             formats: info.formats || [],
             http_headers: info.http_headers || {}
