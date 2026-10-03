@@ -12,6 +12,7 @@ import slidemaker from './slidemaker.js'
 import { startLocalServer, updateProgress, progressCache } from './server.js'
 import { initRecorder, checkOrphanedRecordings } from './recorder.js'
 import { startRegionSelection } from './regionSelector.js'
+import { startYtDlpAutoUpdate, stopYtDlpAutoUpdate } from './ytdlp.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -471,8 +472,12 @@ if (!gotTheLock) {
         );
       }
     });
-
   createWindow()
+  
+  // Keep yt-dlp current: writable userData copy, verified staged updates,
+  // re-checked periodically while the app lives in the tray. See ytdlp.js.
+  startYtDlpAutoUpdate();
+  app.on('will-quit', stopYtDlpAutoUpdate);
   
   ipcMain.on('window-minimize', () => {
     if (mainWindow) mainWindow.minimize()

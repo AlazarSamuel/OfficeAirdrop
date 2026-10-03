@@ -5,6 +5,7 @@ import { app } from 'electron';
 import { extractStreams } from './extractor.js';
 import { ParallelDownloader } from './parallel_downloader.js';
 import { processLiveClip } from './live_chunk_downloader.js';
+import { getYtDlpPath } from './ytdlp.js';
 
 const activeDownloads = new Map();
 
@@ -262,9 +263,7 @@ async function downloadVideo(url, id, quality, startTime, endTime, savePath, onP
 async function doYtdlpDownload(url, tempDir, finalTitle, id, onProgress, abortController, ext = 'mp4') {
   return new Promise((resolve, reject) => {
     const rawDest = path.join(tempDir, `${finalTitle}_raw_[DL-${id}].${ext}`);
-    const ytDlpPath = app.isPackaged
-      ? path.join(process.resourcesPath, 'bin', 'yt-dlp.exe')
-      : path.join(app.getAppPath(), 'bin', 'yt-dlp.exe');
+    const ytDlpPath = getYtDlpPath();
     
     const args = [
       url,
@@ -311,6 +310,10 @@ async function doYtdlpDownload(url, tempDir, finalTitle, id, onProgress, abortCo
     let stderr = '';
     subprocess.stderr.on('data', (data) => {
       stderr += data.toString();
+    });
+
+    subprocess.on('error', (err) => {
+      reject(new Error(`Could not start yt-dlp: ${err.message}`));
     });
 
     subprocess.on('close', (code) => {
@@ -654,9 +657,7 @@ function startLiveClip(url, durationSec, totalDurationSec, title, id, savePath, 
   
   onProgress({ id, title: 'Preparing IDM Live Clip...', percent: 0, speed: '-', totalSize: '-', eta: '-' });
 
-  const ytDlpPath = app.isPackaged
-    ? path.join(process.resourcesPath, 'bin', 'yt-dlp.exe')
-    : path.join(app.getAppPath(), 'bin', 'yt-dlp.exe');
+  const ytDlpPath = getYtDlpPath();
     
   const ffmpegPath = app.isPackaged
     ? path.join(process.resourcesPath, 'bin', 'ffmpeg.exe')

@@ -1,6 +1,5 @@
 import { spawn } from 'child_process';
-import path from 'path';
-import { app } from 'electron';
+import { getYtDlpPath, notifyYtDlpFailure } from './ytdlp.js';
 
 /**
  * Extracts raw CDN stream URLs using yt-dlp.
@@ -17,6 +16,9 @@ export async function extractStreams(url, quality, retries = 1) {
       await new Promise(resolve => setTimeout(resolve, 1500)); // wait 1.5s before retry
       return extractStreams(url, quality, retries - 1);
     }
+    // A site-side breakage usually means yt-dlp is outdated: check for a fix
+    // in the background (throttled inside ytdlp.js) so the next try can succeed.
+    if (error && error.isYtDlpError) notifyYtDlpFailure();
     throw error;
   }
 }
@@ -24,11 +26,9 @@ export async function extractStreams(url, quality, retries = 1) {
 function doExtract(url, quality) {
   return new Promise((resolve, reject) => {
     url = url.trim();
-    const ytDlpPath = app.isPackaged
-      ? path.join(process.resourcesPath, 'bin', 'yt-dlp.exe')
-      : path.join(app.getAppPath(), 'bin', 'yt-dlp.exe');
+    const ytDlpPath = getYtDlpPath();
       
-    const jsRuntimeArgs = ['--js-runtimes', `node:${process.execPath}`];
+    // We rely on yt-dlp's native Python JS solver instead of forcing the electron Node runtime.
 
     let formatString = 'bestvideo[ext=mp4][vcodec^=avc][height<=1080]+bestaudio[ext=m4a]/best[ext=mp4]/best';
     
@@ -50,8 +50,7 @@ function doExtract(url, quality) {
       '--no-playlist',
       '--no-check-certificates',
       '--no-warnings',
-      '--no-cache-dir',
-      ...jsRuntimeArgs
+      '--no-cache-dir'
     ];
 
     if (url.includes('youtube.com') || url.includes('youtu.be')) {
@@ -77,6 +76,12 @@ function doExtract(url, quality) {
 
     subprocess.stderr.on('data', (data) => {
       stderr += data.toString();
+    });
+
+    // Without this, a failed spawn (missing exe, blocked by antivirus) is an
+    // unhandled 'error' event that crashes the main process.
+    subprocess.on('error', (err) => {
+      reject(new Error(`Could not start yt-dlp: ${err.message}`));
     });
 
     subprocess.on('close', (code) => {
@@ -169,7 +174,9 @@ function doExtract(url, quality) {
       } else {
         const stderrLines = stderr.split('\n');
         const ytError = stderrLines.find(line => line.includes('ERROR:')) || 'Extraction failed';
-        reject(new Error(ytError));
+        const err = new Error(ytError);
+        err.isYtDlpError = true;
+        reject(err);
       }
     });
   });

@@ -80,7 +80,8 @@ function parseM3u8(m3u8Text) {
 }
 
 async function processLiveClip(url, durationSec, ytDlpPath, ffmpegPath, outPath, onProgress) {
-  const execPath = 'node:' + process.execPath;
+  // No --js-runtimes: forcing Electron as the JS runtime (without ELECTRON_RUN_AS_NODE)
+  // launches a full Electron app instead of Node. yt-dlp's built-in solvers handle this.
   const args = [
     '--dump-json',
     '-f', 'bestvideo+bestaudio/best',
@@ -88,7 +89,6 @@ async function processLiveClip(url, durationSec, ytDlpPath, ffmpegPath, outPath,
     '--no-check-certificates',
     '--no-warnings',
     '--no-cache-dir',
-    '--js-runtimes', execPath,
     '--impersonate', 'safari',
     url
   ];
