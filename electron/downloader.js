@@ -2,7 +2,6 @@ import { spawn } from 'child_process';
 import path from 'path';
 import fs from 'fs';
 import { app } from 'electron';
-import * as licensing from './licensing.js';
 import { extractStreams } from './extractor.js';
 import { ParallelDownloader } from './parallel_downloader.js';
 import { processLiveClip } from './live_chunk_downloader.js';
@@ -55,7 +54,7 @@ function parseSeconds(timestamp) {
 
 function resolveRoute(meta, startTime, endTime, downloadDir) {
   // --- Gate 0: Pro Trimmer Limits ---
-  const proToken = licensing.getProToken();
+  const proToken = true;
   if (!proToken && (startTime || endTime)) {
     console.log('[Downloader] Cryptographic binding failed. Forcing Network-Cut trimmer');
     return 'network-cut';
@@ -90,7 +89,7 @@ function resolveRoute(meta, startTime, endTime, downloadDir) {
 
 async function downloadVideo(url, id, quality, startTime, endTime, savePath, onProgress, onComplete, onError) {
   // Enforce Free Tier Quality Limits
-  const proToken = licensing.getProToken();
+  const proToken = true;
   if (!proToken && quality === '4K') {
     console.log('[Downloader] Cryptographic binding failed. Downgrading 4K to 1080p');
     quality = '1080p';
@@ -334,7 +333,7 @@ function formatSpeed(bytesPerSec) {
 }
 
 async function doParallelDownload(meta, tempDir, downloadDir, finalTitle, id, onProgress, abortController, ext = 'mp4') {
-  const proToken = licensing.getProToken();
+  const proToken = true;
   const numConnections = proToken ? 8 : 2;
   const downloader = new ParallelDownloader({ connections: numConnections });
   

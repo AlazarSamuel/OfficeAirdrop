@@ -1,0 +1,778 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GrabCut - Smooth Sidebar Navigation</title>
+  <!-- Google Fonts: Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <style>
+    :root {
+      --bg-dark: #1e2139;
+      --sidebar-bg: #17192d;
+      --card-bg: rgba(22, 23, 44, 0.75);
+      --card-border: rgba(255, 255, 255, 0.08);
+      --input-bg: rgba(0, 0, 0, 0.35);
+      --accent: #6366f1;
+      --accent-hover: #4f46e5;
+      --accent-gradient: linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --text-dim: #64748b;
+      --danger: #ef4444;
+      --danger-soft: rgba(239, 68, 68, 0.12);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'Inter', sans-serif;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: var(--bg-dark);
+      color: var(--text-main);
+    }
+
+    .ambient-glow {
+      position: absolute;
+      width: clamp(300px, 45vw, 600px);
+      height: clamp(300px, 45vw, 600px);
+      background: radial-gradient(circle, rgba(99, 102, 241, 0.15) 0%, rgba(168, 85, 247, 0.04) 50%, transparent 70%);
+      top: 10%;
+      right: 10%;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .app-window {
+      position: relative;
+      z-index: 1;
+      width: 100vw;
+      height: 100vh;
+      background: var(--bg-dark);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .title-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0 16px;
+      height: 44px;
+      background: var(--sidebar-bg);
+      border-bottom: 1px solid var(--card-border);
+      flex-shrink: 0;
+      user-select: none;
+    }
+
+    .app-branding {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: #cbd5e1;
+    }
+
+    .logo-icon {
+      width: 22px;
+      height: 22px;
+      background: var(--accent-gradient);
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+    }
+
+    .plan-badge {
+      font-size: 0.65rem;
+      font-weight: 700;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid var(--card-border);
+      padding: 2px 7px;
+      border-radius: 6px;
+      color: #94a3b8;
+    }
+
+    .window-controls {
+      display: flex;
+      gap: 14px;
+      color: var(--text-muted);
+    }
+
+    .window-controls svg {
+      width: 14px;
+      height: 14px;
+      cursor: pointer;
+      transition: color 0.2s;
+    }
+
+    .window-controls svg:hover {
+      color: #fff;
+    }
+
+    .app-body {
+      display: flex;
+      flex: 1;
+      height: calc(100vh - 44px);
+      overflow: hidden;
+    }
+
+    /* ================= SMOOTH ANIMATED SIDEBAR ================= */
+    .sidebar {
+      position: relative;
+      width: clamp(190px, 20vw, 240px);
+      background: var(--sidebar-bg);
+      border-right: 1px solid var(--card-border);
+      padding: 20px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      flex-shrink: 0;
+    }
+
+    /* Sliding pill indicator (spring / cubic-bezier physics) */
+    .nav-indicator {
+      position: absolute;
+      left: 12px;
+      right: 12px;
+      height: 42px;
+      background: rgba(99, 102, 241, 0.16);
+      border: 1px solid rgba(99, 102, 241, 0.35);
+      box-shadow: 0 0 16px rgba(99, 102, 241, 0.25), inset 0 0 12px rgba(99, 102, 241, 0.1);
+      border-radius: 10px;
+      pointer-events: none;
+      z-index: 1;
+      transform: translateY(0);
+      transition: transform 0.38s cubic-bezier(0.34, 1.56, 0.64, 1),
+                  opacity 0.2s ease,
+                  height 0.2s ease;
+    }
+
+    .nav-item {
+      position: relative;
+      z-index: 2;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 14px;
+      height: 42px;
+      border-radius: 10px;
+      color: var(--text-muted);
+      text-decoration: none;
+      font-size: clamp(0.82rem, 0.9vw, 0.9rem);
+      font-weight: 500;
+      transition: color 0.25s ease, transform 0.18s cubic-bezier(0.2, 0.8, 0.2, 1);
+      cursor: pointer;
+      user-select: none;
+      background: transparent;
+      outline: none;
+    }
+
+    .nav-item i {
+      transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), color 0.25s ease;
+      flex-shrink: 0;
+    }
+
+    .nav-item:hover {
+      color: #e2e8f0;
+    }
+
+    .nav-item:hover i {
+      transform: scale(1.1);
+      color: #a5b4fc;
+    }
+
+    .nav-item:active {
+      transform: scale(0.97);
+    }
+
+    .nav-item.active {
+      color: #ffffff;
+      font-weight: 600;
+    }
+
+    .nav-item.active i {
+      color: #818cf8;
+      transform: scale(1.12);
+    }
+
+    /* ================= MAIN CONTENT ================= */
+    .content-area {
+      flex: 1;
+      padding: clamp(18px, 3vw, 32px) clamp(16px, 4vw, 48px);
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+      overflow-y: auto;
+      overflow-x: hidden;
+    }
+
+    .content-area::-webkit-scrollbar {
+      width: 6px;
+    }
+    .content-area::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    .content-area::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 4px;
+    }
+
+    .page-header {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      max-width: 900px;
+      width: 100%;
+      margin: 0 auto;
+    }
+
+    .page-title {
+      font-size: clamp(1.3rem, 2vw, 1.6rem);
+      font-weight: 700;
+      color: #fff;
+      letter-spacing: -0.02em;
+    }
+
+    .subtitle {
+      color: var(--text-muted);
+      font-size: clamp(0.78rem, 1vw, 0.85rem);
+    }
+
+    .settings-stack {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      max-width: 900px;
+      width: 100%;
+      margin: 0 auto;
+      padding-bottom: 24px;
+    }
+
+    .settings-card {
+      background: var(--card-bg);
+      backdrop-filter: blur(16px);
+      border: 1px solid var(--card-border);
+      border-radius: 14px;
+      padding: clamp(14px, 2vw, 18px);
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .card-header-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+      padding-bottom: 8px;
+    }
+
+    .section-tag {
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--text-dim);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .section-tag svg {
+      color: #818cf8;
+    }
+
+    .pro-banner {
+      background: linear-gradient(135deg, rgba(99, 102, 241, 0.12) 0%, rgba(168, 85, 247, 0.12) 100%);
+      border-color: rgba(99, 102, 241, 0.25);
+    }
+
+    .setting-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .setting-info {
+      flex: 1 1 280px;
+    }
+
+    .setting-info h4 {
+      font-size: clamp(0.84rem, 1vw, 0.9rem);
+      font-weight: 600;
+      color: #f8fafc;
+      margin-bottom: 2px;
+    }
+
+    .setting-info p {
+      font-size: clamp(0.74rem, 0.9vw, 0.78rem);
+      color: var(--text-muted);
+      line-height: 1.35;
+    }
+
+    .divider {
+      border-top: 1px solid rgba(255, 255, 255, 0.04);
+      padding-top: 12px;
+    }
+
+    .input-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .text-input {
+      background: var(--input-bg);
+      border: 1px solid var(--card-border);
+      padding: 8px 12px;
+      border-radius: 8px;
+      color: #fff;
+      font-size: 0.82rem;
+      outline: none;
+      transition: border-color 0.2s;
+      min-width: 140px;
+    }
+
+    .text-input:focus {
+      border-color: #6366f1;
+      box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
+    }
+
+    .path-input {
+      font-family: monospace;
+      font-size: 0.78rem;
+      width: clamp(160px, 25vw, 280px);
+      color: #cbd5e1;
+    }
+
+    .input-code {
+      font-family: monospace;
+      letter-spacing: 0.08em;
+      width: clamp(160px, 22vw, 220px);
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: 8px 14px;
+      border-radius: 8px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      border: none;
+      white-space: nowrap;
+    }
+
+    .btn-secondary {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--card-border);
+      color: #cbd5e1;
+    }
+
+    .btn-secondary:hover {
+      background: rgba(255, 255, 255, 0.1);
+      color: #fff;
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      color: #fff;
+      box-shadow: 0 4px 12px rgba(99, 102, 241, 0.35);
+    }
+
+    .btn-primary:hover {
+      background: var(--accent-hover);
+    }
+
+    .btn-pro {
+      background: linear-gradient(135deg, #6366f1, #a855f7);
+      color: #fff;
+      box-shadow: 0 4px 16px rgba(168, 85, 247, 0.35);
+    }
+
+    .btn-pro:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 6px 20px rgba(168, 85, 247, 0.45);
+    }
+
+    .btn-danger {
+      background: var(--danger-soft);
+      border: 1px solid rgba(239, 68, 68, 0.3);
+      color: #f87171;
+    }
+
+    .btn-danger:hover {
+      background: rgba(239, 68, 68, 0.25);
+      color: #fff;
+    }
+
+    .switch-control {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .switch-state-label {
+      font-size: 0.76rem;
+      font-weight: 600;
+      color: var(--text-dim);
+      min-width: 24px;
+    }
+
+    .switch-state-label.active {
+      color: #818cf8;
+    }
+
+    .toggle-switch {
+      position: relative;
+      display: inline-block;
+      width: 42px;
+      height: 22px;
+    }
+
+    .toggle-switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .slider {
+      position: absolute;
+      cursor: pointer;
+      inset: 0;
+      background-color: rgba(255, 255, 255, 0.1);
+      border: 1px solid var(--card-border);
+      transition: .3s;
+      border-radius: 34px;
+    }
+
+    .slider:before {
+      position: absolute;
+      content: "";
+      height: 14px;
+      width: 14px;
+      left: 3px;
+      bottom: 3px;
+      background-color: #cbd5e1;
+      transition: .3s;
+      border-radius: 50%;
+    }
+
+    input:checked + .slider {
+      background-color: var(--accent);
+      border-color: var(--accent);
+    }
+
+    input:checked + .slider:before {
+      transform: translateX(20px);
+      background-color: #fff;
+    }
+
+    @media (max-width: 768px) {
+      .sidebar {
+        width: 68px;
+        padding: 16px 8px;
+        align-items: center;
+      }
+      .nav-indicator {
+        left: 8px;
+        right: 8px;
+      }
+      .nav-item span {
+        display: none;
+      }
+      .nav-item {
+        justify-content: center;
+        padding: 10px;
+      }
+      .setting-row {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+      .input-group {
+        width: 100%;
+      }
+      .path-input, .input-code {
+        width: 100%;
+        flex: 1;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="ambient-glow"></div>
+
+  <main class="app-window">
+    <header class="title-bar">
+      <div class="app-branding">
+        <div class="logo-icon">
+          <i data-lucide="zap" style="width: 14px; height: 14px;"></i>
+        </div>
+        <span>GrabCut</span>
+        <span class="plan-badge">FREE</span>
+      </div>
+      <div class="window-controls">
+        <i data-lucide="minus"></i>
+        <i data-lucide="square"></i>
+        <i data-lucide="x"></i>
+      </div>
+    </header>
+
+    <div class="app-body">
+      <!-- Sidebar with dynamic gliding pill -->
+      <nav class="sidebar" id="sidebar">
+        <!-- Floating highlight pill -->
+        <div class="nav-indicator" id="navIndicator"></div>
+
+        <a class="nav-item">
+          <i data-lucide="share-2" style="width: 18px; height: 18px;"></i>
+          <span>Share</span>
+        </a>
+        <a class="nav-item">
+          <i data-lucide="clock" style="width: 18px; height: 18px;"></i>
+          <span>History</span>
+        </a>
+        <a class="nav-item">
+          <i data-lucide="download-cloud" style="width: 18px; height: 18px;"></i>
+          <span>Downloader</span>
+        </a>
+        <a class="nav-item">
+          <i data-lucide="film" style="width: 18px; height: 18px;"></i>
+          <span>Slide Maker</span>
+        </a>
+        <a class="nav-item active">
+          <i data-lucide="settings" style="width: 18px; height: 18px;"></i>
+          <span>Settings</span>
+        </a>
+      </nav>
+
+      <!-- Content Area -->
+      <section class="content-area">
+        <div class="page-header">
+          <h1 class="page-title">Settings</h1>
+          <p class="subtitle">Manage preferences, transfer destinations, integrations, and privacy</p>
+        </div>
+
+        <div class="settings-stack">
+          <!-- 1. Browser Extension -->
+          <div class="settings-card">
+            <div class="card-header-row">
+              <span class="section-tag">
+                <i data-lucide="chrome" style="width: 13px; height: 13px;"></i>
+                Chrome & Edge Extension
+              </span>
+            </div>
+            <div class="setting-row">
+              <div class="setting-info">
+                <h4>Install Browser Extension</h4>
+                <p>Send video and slide links directly to GrabCut with a single click</p>
+              </div>
+              <button class="btn btn-secondary">
+                <i data-lucide="external-link" style="width: 14px; height: 14px;"></i>
+                How to Install
+              </button>
+            </div>
+          </div>
+
+          <!-- 2. License & Activation Banner -->
+          <div class="settings-card pro-banner">
+            <div class="card-header-row">
+              <span class="section-tag" style="color: #a855f7;">
+                <i data-lucide="sparkles" style="width: 13px; height: 13px; color: #a855f7;"></i>
+                License & Activation
+              </span>
+              <span class="plan-badge" style="background: rgba(168, 85, 247, 0.15); color: #c084fc; border-color: rgba(168, 85, 247, 0.3);">
+                Current: Free Edition
+              </span>
+            </div>
+
+            <div class="setting-row">
+              <div class="setting-info">
+                <h4>Get GrabCut Pro — $19.99</h4>
+                <p>Unlock 4K video exports, 16-thread turbo mode, and unlimited batch slides with lifetime access.</p>
+              </div>
+              <button class="btn btn-pro">
+                <i data-lucide="zap" style="width: 14px; height: 14px;"></i>
+                Upgrade to Pro
+              </button>
+            </div>
+
+            <div class="setting-row divider">
+              <div class="setting-info">
+                <h4>Already have a license key?</h4>
+                <p>Enter your 16-digit product code to activate Pro features</p>
+              </div>
+              <div class="input-group">
+                <input type="text" class="text-input input-code" placeholder="XXXX-XXXX-XXXX-XXXX" spellcheck="false" />
+                <button class="btn btn-primary">Activate</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- 3. Network Identity -->
+          <div class="settings-card">
+            <div class="card-header-row">
+              <span class="section-tag">
+                <i data-lucide="network" style="width: 13px; height: 13px;"></i>
+                Network & Local Identity
+              </span>
+            </div>
+            <div class="setting-row">
+              <div class="setting-info">
+                <h4>Display Name</h4>
+                <p>How this device appears to others on the local network</p>
+              </div>
+              <div class="input-group">
+                <input type="text" class="text-input" value="DESKTOP-FR1OAS8" />
+                <button class="btn btn-secondary">Rename</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- 4. Incoming Files & Automation -->
+          <div class="settings-card">
+            <div class="card-header-row">
+              <span class="section-tag">
+                <i data-lucide="folder-down" style="width: 13px; height: 13px;"></i>
+                Incoming Files & Transfers
+              </span>
+            </div>
+
+            <div class="setting-row">
+              <div class="setting-info">
+                <h4>Save files to</h4>
+                <p>Received transfers are automatically placed into this local folder</p>
+              </div>
+              <div class="input-group">
+                <input type="text" class="text-input path-input" value="C:\Users\hp\Downloads" readonly />
+                <button class="btn btn-secondary" title="Browse Folder">
+                  <i data-lucide="folder-open" style="width: 15px; height: 15px;"></i>
+                  Change
+                </button>
+              </div>
+            </div>
+
+            <div class="setting-row divider">
+              <div class="setting-info">
+                <h4>Auto-accept all incoming files</h4>
+                <p>Save incoming transfers automatically without showing a confirmation prompt</p>
+              </div>
+              <div class="switch-control">
+                <span class="switch-state-label" id="auto-accept-label">Off</span>
+                <label class="toggle-switch">
+                  <input type="checkbox" onchange="document.getElementById('auto-accept-label').textContent = this.checked ? 'On' : 'Off'; document.getElementById('auto-accept-label').classList.toggle('active', this.checked);">
+                  <span class="slider"></span>
+                </label>
+              </div>
+            </div>
+
+            <div class="setting-row divider">
+              <div class="setting-info">
+                <h4>Show transfer notifications</h4>
+                <p>Get an alert when a file finishes transferring</p>
+              </div>
+              <div class="switch-control">
+                <span class="switch-state-label active" id="notif-label">On</span>
+                <label class="toggle-switch">
+                  <input type="checkbox" checked onchange="document.getElementById('notif-label').textContent = this.checked ? 'On' : 'Off'; document.getElementById('notif-label').classList.toggle('active', this.checked);">
+                  <span class="slider"></span>
+                </label>
+              </div>
+            </div>
+
+            <div class="setting-row divider">
+              <div class="setting-info">
+                <h4>Start with Windows</h4>
+                <p>Run GrabCut silently in the background when your computer turns on</p>
+              </div>
+              <div class="switch-control">
+                <span class="switch-state-label" id="start-label">Off</span>
+                <label class="toggle-switch">
+                  <input type="checkbox" onchange="document.getElementById('start-label').textContent = this.checked ? 'On' : 'Off'; document.getElementById('start-label').classList.toggle('active', this.checked);">
+                  <span class="slider"></span>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <!-- 5. Data & Privacy -->
+          <div class="settings-card">
+            <div class="card-header-row">
+              <span class="section-tag" style="color: #f87171;">
+                <i data-lucide="shield" style="width: 13px; height: 13px; color: #f87171;"></i>
+                Data & Privacy
+              </span>
+            </div>
+            <div class="setting-row">
+              <div class="setting-info">
+                <h4>Clear Transfer History</h4>
+                <p>Permanently remove all local transfer logs and cache from this machine</p>
+              </div>
+              <button class="btn btn-danger">
+                <i data-lucide="trash-2" style="width: 14px; height: 14px;"></i>
+                Clear History
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <script>
+    lucide.createIcons();
+
+    // Smooth Gliding Indicator Logic
+    const navItems = document.querySelectorAll('.nav-item');
+    const indicator = document.getElementById('navIndicator');
+
+    function positionIndicator(target) {
+      if (!target) return;
+      const topOffset = target.offsetTop;
+      indicator.style.transform = `translateY(${topOffset - 20}px)`; // 20px is sidebar top padding
+    }
+
+    // Set initial position
+    const activeItem = document.querySelector('.nav-item.active');
+    if (activeItem) {
+      positionIndicator(activeItem);
+    }
+
+    navItems.forEach(item => {
+      item.addEventListener('click', () => {
+        navItems.forEach(el => el.classList.remove('active'));
+        item.classList.add('active');
+        positionIndicator(item);
+      });
+    });
+
+    // Re-calculate on window resize
+    window.addEventListener('resize', () => {
+      const currentActive = document.querySelector('.nav-item.active');
+      if (currentActive) positionIndicator(currentActive);
+    });
+  </script>
+</body>
+</html>

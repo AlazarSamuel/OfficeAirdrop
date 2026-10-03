@@ -170,9 +170,15 @@ export class ParallelDownloader {
               res.destroy();
               return;
             }
-            fs.writeSync(fd, chunk, 0, chunk.length, currentOffset);
-            currentOffset += chunk.length;
-            onChunkProgress(chunk.length);
+            try {
+              fs.writeSync(fd, chunk, 0, chunk.length, currentOffset);
+              currentOffset += chunk.length;
+              onChunkProgress(chunk.length);
+            } catch (err) {
+              if (err.code !== 'EBADF') {
+                reject(err);
+              }
+            }
           });
 
           res.on('end', () => {

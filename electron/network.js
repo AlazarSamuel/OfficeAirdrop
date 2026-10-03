@@ -587,17 +587,21 @@ class NetworkManager {
       let lastProgress = 0
       let lastTime = Date.now()
       let lastBytes = 0
+      let smoothedRecvSpeed = 0
       
       form.on('progress', (bytesReceived, bytesExpected) => {
-        const progress = bytesExpected === 0 ? 100 : Math.round((bytesReceived / bytesExpected) * 100)
+        const progress = bytesExpected === 0 ? 100 : Math.min(100, Math.round((bytesReceived / bytesExpected) * 100))
         const now = Date.now()
         
-        if (progress > lastProgress || (now - lastTime >= 500)) {
+        if (progress > lastProgress || (now - lastTime >= 350)) {
           const timeDiff = (now - lastTime) / 1000
           const bytesDiff = bytesReceived - lastBytes
-          const speed = timeDiff > 0 ? Math.max(0, bytesDiff / timeDiff) : 0
-          const bytesRemaining = bytesExpected - bytesReceived
-          const eta = speed > 0 ? Math.ceil(bytesRemaining / speed) : 0
+          if (timeDiff > 0) {
+            const instantSpeed = Math.max(0, bytesDiff / timeDiff)
+            smoothedRecvSpeed = smoothedRecvSpeed > 0 ? (0.75 * smoothedRecvSpeed + 0.25 * instantSpeed) : instantSpeed
+          }
+          const bytesRemaining = Math.max(0, bytesExpected - bytesReceived)
+          const eta = smoothedRecvSpeed > 0 ? Math.ceil(bytesRemaining / smoothedRecvSpeed) : 0
           
           lastProgress = progress
           lastTime = now
@@ -610,7 +614,7 @@ class NetworkManager {
             progress,
             bytesTransferred: bytesReceived,
             bytesTotal: bytesExpected,
-            speed,
+            speed: smoothedRecvSpeed,
             eta
           })
         }
@@ -806,14 +810,24 @@ class NetworkManager {
 
     let totalSize = 0
     for (const fp of filePaths) {
-      totalSize += fs.statSync(fp).size
+      try {
+        totalSize += fs.statSync(fp).size
+      } catch {
+        // ignore unreadable files
+      }
     }
 
-    const displayFileName = filePaths.length > 1 ? `${filePaths.length} files` : path.basename(filePaths[0])
+    const fileCount = filePaths.length
+    const displayFileName = fileCount > 1 ? `${fileCount} files` : path.basename(filePaths[0])
     const peerNameOverride = this.aliases[peer.id] || peer.name
     
     // Immediately tell the UI we are waiting/connecting so it doesn't look frozen
-    this.sendIPC('transfer-waiting', { fileName: displayFileName, peerName: peerNameOverride })
+    this.sendIPC('transfer-waiting', { 
+      fileName: displayFileName, 
+      peerName: peerNameOverride,
+      fileCount: fileCount,
+      bytesTotal: totalSize
+    })
 
     const socket = Client(`http://${peer.ip}:${peer.port}`, {
       reconnection: false,
@@ -824,20 +838,61 @@ class NetworkManager {
       socket.emit('request-transfer', {
         senderName: this.displayName,
         fileName: displayFileName,
-        fileSize: totalSize
+        fileSize: totalSize,
+        fileCount: fileCount
       }, async (response) => {
         if (response.accepted && response.token) {
           console.log('Peer accepted. Uploading...')
           this.sendIPC('transfer-accepted', { fileName: displayFileName, peerName: peerNameOverride })
           
+          let cumulativeBytesTransferred = 0
+          let currentSmoothedSpeed = 0
+          let hasError = false
+          
           // Upload sequentially to avoid creating multiple temp files concurrently and crashing the endpoint
-          for (const fp of filePaths) {
+          for (let i = 0; i < filePaths.length; i++) {
+            const fp = filePaths[i]
+            if (this.isCancelled) break
             try {
-              await this.uploadSingleFilePromise(peer.ip, peer.port, fp, peerNameOverride, response.token)
+              const fileStats = fs.statSync(fp)
+              await this.uploadSingleFilePromise(
+                peer.ip, 
+                peer.port, 
+                fp, 
+                peerNameOverride, 
+                response.token,
+                {
+                  fileIndex: i + 1,
+                  fileCount: filePaths.length,
+                  totalBatchBytes: totalSize,
+                  cumulativeBase: cumulativeBytesTransferred,
+                  getSmoothedSpeed: () => currentSmoothedSpeed,
+                  setSmoothedSpeed: (s) => { currentSmoothedSpeed = s }
+                }
+              )
+              cumulativeBytesTransferred += fileStats.size
             } catch (err) {
               console.error(`Failed to upload ${fp}:`, err)
-              this.sendIPC('transfer-error', { message: `Failed to send ${path.basename(fp)}` })
+              if (!this.isCancelled) {
+                this.sendIPC('transfer-error', { message: `Failed to send ${path.basename(fp)}` })
+              }
+              hasError = true
+              break
             }
+          }
+
+          if (!hasError && !this.isCancelled) {
+            const batchEntry = {
+              id: Date.now().toString() + Math.random().toString(36).substring(2, 6),
+              direction: 'sent',
+              fileName: displayFileName,
+              fileSize: totalSize,
+              fileCount: fileCount,
+              peerName: peerNameOverride,
+              status: 'completed',
+              timestamp: Date.now()
+            }
+            this.sendIPC('transfer-complete', batchEntry)
           }
         } else {
           console.log('Peer declined.')
@@ -889,6 +944,11 @@ class NetworkManager {
     if (this.activeFileStream) this.activeFileStream.pause();
     if (this.activeIncomingReq) this.activeIncomingReq.pause();
     this.sendIPC('transfer-paused', { isPaused: true });
+    this.sendIPC('transfer-progress', {
+      isPaused: true,
+      speed: 0,
+      eta: null
+    });
   }
 
   resumeTransfer() {
@@ -898,11 +958,15 @@ class NetworkManager {
     this.sendIPC('transfer-paused', { isPaused: false });
   }
 
-  uploadSingleFilePromise(ip, port, filePath, peerName, token) {
+  uploadSingleFilePromise(ip, port, filePath, peerName, token, batchInfo = {}) {
     return new Promise((resolve, reject) => {
       this.isCancelled = false;
       const fileName = path.basename(filePath)
       const fileSize = fs.statSync(filePath).size
+      const fileIndex = batchInfo.fileIndex || 1
+      const fileCount = batchInfo.fileCount || 1
+      const totalBatchBytes = batchInfo.totalBatchBytes || fileSize
+      const cumulativeBase = batchInfo.cumulativeBase || 0
 
       const boundary = '----OfficeAirDropBoundary' + Math.random().toString(16)
 
@@ -936,7 +1000,9 @@ class NetworkManager {
             status: 'completed',
             timestamp: Date.now()
           }
-          this.sendIPC('transfer-complete', entry)
+          if (fileCount === 1) {
+            this.sendIPC('transfer-complete', entry)
+          }
           if (this.onHistoryEntry) this.onHistoryEntry(entry)
           resolve()
         })
@@ -965,31 +1031,42 @@ class NetworkManager {
       let lastProgress = 0
       let lastTime = Date.now()
       let lastBytes = 0
+      let smoothedSpeed = batchInfo.getSmoothedSpeed ? batchInfo.getSmoothedSpeed() : 0
 
       fileStream.on('data', (chunk) => {
         uploaded += chunk.length
-        const progress = fileSize === 0 ? 100 : Math.round((uploaded / fileSize) * 100)
+        const totalUploadedSoFar = cumulativeBase + uploaded
+        const overallProgress = totalBatchBytes === 0 ? 100 : Math.min(100, Math.round((totalUploadedSoFar / totalBatchBytes) * 100))
+        const fileProgress = fileSize === 0 ? 100 : Math.min(100, Math.round((uploaded / fileSize) * 100))
         const now = Date.now()
         
-        if (progress > lastProgress || (now - lastTime >= 500)) {
+        if (overallProgress > lastProgress || (now - lastTime >= 350)) {
           const timeDiff = (now - lastTime) / 1000
           const bytesDiff = uploaded - lastBytes
-          const speed = timeDiff > 0 ? Math.max(0, bytesDiff / timeDiff) : 0
-          const bytesRemaining = fileSize - uploaded
-          const eta = speed > 0 ? Math.ceil(bytesRemaining / speed) : 0
+          if (timeDiff > 0) {
+            const instantSpeed = Math.max(0, bytesDiff / timeDiff)
+            smoothedSpeed = smoothedSpeed > 0 ? (0.75 * smoothedSpeed + 0.25 * instantSpeed) : instantSpeed
+            if (batchInfo.setSmoothedSpeed) {
+              batchInfo.setSmoothedSpeed(smoothedSpeed)
+            }
+          }
+          const bytesRemaining = Math.max(0, totalBatchBytes - totalUploadedSoFar)
+          const eta = smoothedSpeed > 0 ? Math.ceil(bytesRemaining / smoothedSpeed) : 0
           
-          lastProgress = progress
+          lastProgress = overallProgress
           lastTime = now
           lastBytes = uploaded
           
           this.sendIPC('transfer-progress', {
             direction: 'sending',
             fileName,
-            peerName,
-            progress,
-            bytesTransferred: uploaded,
-            bytesTotal: fileSize,
-            speed,
+            fileIndex,
+            fileCount,
+            progress: overallProgress,
+            fileProgress,
+            bytesTransferred: totalUploadedSoFar,
+            bytesTotal: totalBatchBytes,
+            speed: smoothedSpeed,
             eta
           })
         }

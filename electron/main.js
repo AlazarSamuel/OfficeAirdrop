@@ -1,15 +1,17 @@
 import electron from 'electron'
-const { app, BrowserWindow, ipcMain, dialog, shell, nativeImage, Tray, Menu, session, protocol, net } = electron
+const { app, BrowserWindow, ipcMain, dialog, shell, nativeImage, Tray, Menu, session, protocol, net, clipboard, globalShortcut, screen } = electron
 import path from 'path'
 import https from 'https'
 import fs from 'fs'
 import os from 'os'
 import { fileURLToPath } from 'url'
+import { execFile } from 'child_process'
 import NetworkManager from './network.js'
 import downloader from './downloader.js'
 import slidemaker from './slidemaker.js'
-import * as licensing from './licensing.js'
 import { startLocalServer, updateProgress, progressCache } from './server.js'
+import { initRecorder, checkOrphanedRecordings } from './recorder.js'
+import { startRegionSelection } from './regionSelector.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -22,11 +24,10 @@ let mainWindow
 let networkManager
 let tray = null
 let isQuitting = false
+let borderWindow = null
+let controlWindow = null
 
 global.proxyHeadersCache = new Map();
-global.isPro = false;
-global.licenseExpiresAt = null;
-
 // We no longer manually spoof the User-Agent, because spoofing it causes YouTube's WAF 
 // to detect a TLS fingerprint mismatch. We let Electron use its authentic Chromium UA.
 
@@ -126,14 +127,22 @@ function hidePeer(peerId) {
 // ── Window ────────────────────────────────────────────────
 
 function createWindow() {
-  const isDev = !!process.env.VITE_DEV_SERVER_URL
-  const iconPath = path.join(__dirname, '../dist/icon.png')
+  let iconFile = path.join(__dirname, '../public/icon.ico')
+  if (!fs.existsSync(iconFile)) {
+    iconFile = path.join(__dirname, '../dist/icon.ico')
+  }
+  if (!fs.existsSync(iconFile)) {
+    iconFile = path.join(__dirname, '../public/icon.png')
+  }
+  const appIcon = nativeImage.createFromPath(iconFile)
 
   const windowOptions = {
     width: 950,
     height: 680,
     minWidth: 800,
     minHeight: 600,
+    show: false,
+    icon: appIcon,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: false,
@@ -152,14 +161,32 @@ function createWindow() {
     backgroundColor: '#1c1c1c',
   }
 
-  // In production on Windows, relying on the executable's baked-in .ico is the most reliable way 
-  // to ensure the taskbar icon is rendered correctly.
-  if (isDev || process.platform !== 'win32') {
-    windowOptions.icon = iconPath
-  }
-
   mainWindow = new BrowserWindow(windowOptions)
 
+  let splashWindow = null
+  const isHidden = process.argv.includes('--hidden')
+
+  if (!isHidden) {
+    splashWindow = new BrowserWindow({
+      width: 560,
+      height: 315,
+      transparent: true,
+      frame: false,
+      alwaysOnTop: true,
+      resizable: false,
+      icon: appIcon,
+      webPreferences: {
+        nodeIntegration: false,
+        contextIsolation: true
+      }
+    })
+
+    if (process.env.VITE_DEV_SERVER_URL) {
+      splashWindow.loadURL(process.env.VITE_DEV_SERVER_URL + 'splash.html')
+    } else {
+      splashWindow.loadFile(path.join(__dirname, '../dist/splash.html'))
+    }
+  }
   // Spoof Origin/Referer for YouTube embed requests to bypass "playback on other websites disabled" (Error 152-4)
   // This makes YouTube's server think the embed is loaded from youtube.com itself.
   session.defaultSession.webRequest.onBeforeSendHeaders(
@@ -206,6 +233,40 @@ function createWindow() {
     mainWindow.loadFile(path.join(__dirname, '../dist/index.html'))
   }
 
+  // Register standard Edit shortcuts (Ctrl+C, Ctrl+V, Ctrl+X, Ctrl+A) globally
+  const appMenu = Menu.buildFromTemplate([
+    {
+      label: 'Edit',
+      submenu: [
+        { role: 'undo' },
+        { role: 'redo' },
+        { type: 'separator' },
+        { role: 'cut' },
+        { role: 'copy' },
+        { role: 'paste' },
+        { role: 'selectAll' }
+      ]
+    }
+  ])
+  Menu.setApplicationMenu(appMenu)
+
+  // Show native context menu on right-click for any text input
+  mainWindow.webContents.on('context-menu', (e, params) => {
+    if (params.isEditable) {
+      const editContextMenu = Menu.buildFromTemplate([
+        { role: 'undo' },
+        { role: 'redo' },
+        { type: 'separator' },
+        { role: 'cut' },
+        { role: 'copy' },
+        { role: 'paste' },
+        { type: 'separator' },
+        { role: 'selectAll' }
+      ])
+      editContextMenu.popup({ window: mainWindow })
+    }
+  })
+
   // Handle close to hide in tray
   mainWindow.on('close', (event) => {
     if (!isQuitting) {
@@ -215,7 +276,7 @@ function createWindow() {
   })
 
   // Create Tray
-  tray = new Tray(nativeImage.createFromPath(iconPath))
+  tray = new Tray(appIcon)
   const contextMenu = Menu.buildFromTemplate([
     { label: 'Show GrabCut', click: () => mainWindow.show() },
     { type: 'separator' },
@@ -234,11 +295,47 @@ function createWindow() {
     mainWindow.show()
   })
 
+  // Tray recording listeners
+  ipcMain.on('recording-started', () => {
+    tray.setToolTip('GrabCut - RECORDING')
+    // We could change tray.setImage here if we had a rec icon
+    const recMenu = Menu.buildFromTemplate([
+      { label: 'Show GrabCut', click: () => mainWindow.show() },
+      { label: 'Stop Recording', click: () => mainWindow.webContents.send('toggle-recording') },
+      { type: 'separator' },
+      { label: 'Quit', click: () => { isQuitting = true; app.quit() } }
+    ])
+    tray.setContextMenu(recMenu)
+  })
+
+  ipcMain.on('recording-stopped', () => {
+    tray.setToolTip('GrabCut')
+    tray.setContextMenu(contextMenu)
+  })
+
   // Start hidden if started at login
-  const isHidden = process.argv.includes('--hidden')
   if (!isHidden) {
+    let mainReady = false
+    let splashClosed = false
+
+    const tryShowMain = () => {
+      if (mainReady && splashClosed) {
+        mainWindow.show()
+      }
+    }
+
+    if (splashWindow) {
+      splashWindow.on('closed', () => {
+        splashClosed = true
+        tryShowMain()
+      })
+    } else {
+      splashClosed = true
+    }
+
     mainWindow.once('ready-to-show', () => {
-      mainWindow.show()
+      mainReady = true
+      tryShowMain()
     })
   }
 
@@ -257,12 +354,34 @@ const gotTheLock = app.requestSingleInstanceLock()
 if (!gotTheLock) {
   app.quit()
 } else {
+  const handleDeepLink = (urlStr) => {
+    // deep links not used
+  }
+
   app.on('second-instance', (event, commandLine, workingDirectory) => {
     if (mainWindow) {
       if (mainWindow.isMinimized()) mainWindow.restore()
       mainWindow.show()
       mainWindow.focus()
     }
+    const url = commandLine.find(arg => arg.startsWith('grabcut://'))
+    if (url) handleDeepLink(url)
+    
+    // Check if a file was passed (context menu)
+    const possibleFile = commandLine.find(arg => fs.existsSync(arg) && fs.statSync(arg).isFile() && !arg.includes('electron.exe') && !arg.includes('GrabCut.exe'))
+    if (possibleFile && mainWindow) {
+      mainWindow.webContents.send('context-menu-file', possibleFile)
+    }
+  })
+
+  app.on('open-url', (event, url) => {
+    event.preventDefault()
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore()
+      mainWindow.show()
+      mainWindow.focus()
+    }
+    handleDeepLink(url)
   })
   
   if (process.defaultApp) {
@@ -274,9 +393,6 @@ if (!gotTheLock) {
   }
 
   app.whenReady().then(async () => {
-    // Run offline license verification on boot
-    await licensing.verifyLicense()
-
     if (process.platform === 'win32') {
       app.setAppUserModelId('com.grabcut.app')
     }
@@ -306,6 +422,16 @@ if (!gotTheLock) {
       settings.lastVersion = currentVersion
       saveSettings(settings)
     }
+
+    // Process argv if started with a file
+    setTimeout(() => {
+      if (mainWindow && process.argv.length >= 2) {
+        const possibleFile = process.argv.find((arg, index) => index > 0 && fs.existsSync(arg) && fs.statSync(arg).isFile() && !arg.includes('electron.exe') && !arg.includes('GrabCut.exe'))
+        if (possibleFile) {
+          mainWindow.webContents.send('context-menu-file', possibleFile)
+        }
+      }
+    }, 1500) // Wait for React to load
 
     app.on('web-contents-created', (_, contents) => {
       if (contents.getType() === 'webview') {
@@ -348,6 +474,56 @@ if (!gotTheLock) {
 
   createWindow()
   
+  ipcMain.on('window-minimize', () => {
+    if (mainWindow) mainWindow.minimize()
+  })
+  
+  ipcMain.on('window-maximize', () => {
+    if (mainWindow) {
+      if (mainWindow.isMaximized()) {
+        mainWindow.unmaximize()
+      } else {
+        mainWindow.maximize()
+      }
+    }
+  })
+  
+  ipcMain.on('window-close', () => {
+    if (mainWindow) mainWindow.close()
+  })
+
+  ipcMain.handle('get-recording-history', async () => {
+    try {
+      const settings = loadSettings()
+      const dir = settings.savePath || app.getPath('downloads')
+      
+      if (!fs.existsSync(dir)) return []
+      
+      const files = fs.readdirSync(dir)
+      const mp4s = files.filter(f => f.startsWith('GrabCut_') && f.endsWith('.mp4'))
+      
+      return mp4s.map(f => {
+        const fullPath = path.join(dir, f)
+        const stats = fs.statSync(fullPath)
+        return {
+          id: f,
+          fileName: f,
+          filePath: fullPath,
+          fileSize: stats.size,
+          timestamp: stats.mtimeMs
+        }
+      }).sort((a, b) => b.timestamp - a.timestamp)
+    } catch (e) {
+      console.error(e)
+      return []
+    }
+  })
+  
+  ipcMain.on('open-path', (event, filePath) => {
+    const { shell } = require('electron')
+    shell.showItemInFolder(filePath)
+  })
+
   // Start Extension Server
   startLocalServer({
     onUrlReceived: (url, autoDownload, quality) => {
@@ -380,6 +556,145 @@ if (!gotTheLock) {
     }
   })
   
+  // Register Region Capture handler
+  ipcMain.handle('start-region-selection', async () => {
+    return await startRegionSelection()
+  })
+
+  ipcMain.on('show-recording-border', (event, bounds) => {
+    if (borderWindow) {
+      borderWindow.close()
+      borderWindow = null
+    }
+    if (!bounds) return;
+    
+    borderWindow = new BrowserWindow({
+      x: bounds.x,
+      y: bounds.y,
+      width: bounds.width,
+      height: bounds.height,
+      transparent: true,
+      frame: false,
+      alwaysOnTop: true,
+      skipTaskbar: true,
+      resizable: false,
+      movable: false,
+      focusable: false,
+      hasShadow: false,
+      webPreferences: {
+        nodeIntegration: true,
+        contextIsolation: false
+      }
+    });
+    
+    borderWindow.setIgnoreMouseEvents(true, { forward: true });
+    borderWindow.setAlwaysOnTop(true, 'screen-saver');
+    borderWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+    borderWindow.setContentProtection(true);
+    borderWindow.loadFile(path.join(__dirname, 'border.html'));
+
+    // Create the floating control window below the region
+    if (controlWindow) {
+      controlWindow.close();
+      controlWindow = null;
+    }
+
+    const activeDisplay = screen.getDisplayNearestPoint({ x: bounds.x, y: bounds.y });
+    
+    // Default position: 10px below the region
+    let controlY = bounds.y + bounds.height + 10;
+    
+    // If placing it below pushes it off the bottom of the screen, place it 70px ABOVE the bottom edge (inside the region)
+    if (controlY + 60 > activeDisplay.bounds.y + activeDisplay.bounds.height) {
+      controlY = bounds.y + bounds.height - 70;
+    }
+
+    controlWindow = new BrowserWindow({
+      x: bounds.x + bounds.width - 240, // bottom right alignment (width 220px + 20px padding)
+      y: controlY,
+      width: 240,
+      height: 60,
+      transparent: true,
+      frame: false,
+      alwaysOnTop: true,
+      skipTaskbar: true,
+      resizable: false,
+      movable: true,
+      focusable: true,
+      hasShadow: false,
+      webPreferences: {
+        nodeIntegration: true,
+        contextIsolation: false
+      }
+    });
+
+    controlWindow.setAlwaysOnTop(true, 'screen-saver');
+    controlWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+    controlWindow.setContentProtection(true);
+    controlWindow.loadFile(path.join(__dirname, 'controls.html'));
+  });
+
+  ipcMain.on('hide-recording-border', () => {
+    if (borderWindow && !borderWindow.isDestroyed()) {
+      borderWindow.close();
+    }
+    borderWindow = null;
+    
+    if (controlWindow && !controlWindow.isDestroyed()) {
+      controlWindow.close();
+    }
+    controlWindow = null;
+  });
+
+  ipcMain.on('floating-pause', () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('floating-pause');
+    }
+  });
+
+  ipcMain.on('floating-stop', () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('floating-stop');
+    }
+  });
+
+  ipcMain.on('update-recording-timer', (event, timeStr) => {
+    if (controlWindow && !controlWindow.isDestroyed()) {
+      controlWindow.webContents.send('recording-timer-update', timeStr);
+    }
+  });
+
+  ipcMain.on('update-overlay-countdown', (event, tick) => {
+    if (borderWindow && !borderWindow.isDestroyed()) {
+      borderWindow.webContents.send('update-overlay-countdown', tick);
+    }
+  });
+  
+  // Initialize Screen Recorder
+  initRecorder(mainWindow)
+  checkOrphanedRecordings(mainWindow)
+
+  // Setup Global Hotkey
+  const setupHotkey = () => {
+    const currentSettings = loadSettings()
+    globalShortcut.unregister('Alt+Shift+R')
+    if (currentSettings.enableGlobalHotkey !== false) { // Default true
+      globalShortcut.register('Alt+Shift+R', () => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('toggle-recording')
+        }
+      })
+    }
+  }
+  setupHotkey()
+
+  // Re-setup hotkey if settings change
+  ipcMain.handle('save-settings', (event, settings) => {
+    saveSettings(settings)
+    setupHotkey()
+    return true
+  })
+  
   // Notify frontend if updated
   if (wasUpdated) {
     mainWindow.once('ready-to-show', () => {
@@ -398,29 +713,8 @@ app.on('window-all-closed', () => {
 
 // ── IPC Handlers ──────────────────────────────────────────
 
-// Licensing
-ipcMain.handle('get-license-status', () => {
-  return {
-    isPro: global.isPro,
-    expiresAt: global.licenseExpiresAt
-  }
-})
+ipcMain.handle('read-clipboard', () => clipboard.readText())
 
-ipcMain.handle('activate-license', async (event, key) => {
-  try {
-    return await licensing.activateLicense(key)
-  } catch (err) {
-    return { success: false, error: err.message }
-  }
-})
-
-ipcMain.handle('deactivate-license', async () => {
-  try {
-    return await licensing.deactivateLicense()
-  } catch (err) {
-    return { success: false, error: err.message }
-  }
-})
 
 // File sending
 ipcMain.on('send-files', (event, peerId, filePaths) => {
@@ -497,10 +791,7 @@ ipcMain.handle('get-hostname', () => os.hostname())
 
 // Settings
 ipcMain.handle('get-settings', () => loadSettings())
-ipcMain.handle('save-settings', (event, settings) => {
-  saveSettings(settings)
-  return true
-})
+// save-settings handler was moved to app.whenReady to access setupHotkey
 
 // Startup Settings
 ipcMain.handle('get-startup', () => {
@@ -535,8 +826,65 @@ ipcMain.handle('clear-history', () => {
 })
 
 // Open file / folder
+ipcMain.handle('install-context-menu', () => {
+  if (process.platform === 'win32') {
+    const exePath = process.execPath
+    let iconPath = exePath
+    let commandStr = `"${exePath}" "%1"`
+    
+    if (!app.isPackaged) {
+      iconPath = path.join(app.getAppPath(), 'public', 'icon.ico')
+      commandStr = `"${exePath}" "${app.getAppPath()}" "%1"`
+    }
+
+    execFile('reg.exe', ['add', 'HKCU\\Software\\Classes\\*\\shell\\GrabCut', '/ve', '/t', 'REG_SZ', '/d', 'Share via GrabCut', '/f'], (err) => {
+      if (err) console.error('Failed to add context menu key:', err)
+      execFile('reg.exe', ['add', 'HKCU\\Software\\Classes\\*\\shell\\GrabCut', '/v', 'Icon', '/t', 'REG_SZ', '/d', `"${iconPath}"`, '/f'], (err2) => {
+        if (err2) console.error('Failed to add context menu icon:', err2)
+        execFile('reg.exe', ['add', 'HKCU\\Software\\Classes\\*\\shell\\GrabCut\\command', '/ve', '/t', 'REG_SZ', '/d', commandStr, '/f'], (err3) => {
+          if (err3) console.error('Failed to add context menu command:', err3)
+        })
+      })
+    })
+  }
+  return true
+})
+
+ipcMain.handle('remove-context-menu', () => {
+  if (process.platform === 'win32') {
+    execFile('reg.exe', ['delete', 'HKCU\\Software\\Classes\\*\\shell\\GrabCut', '/f'], (err) => {
+      if (err) console.error('Failed to remove context menu key:', err)
+    })
+  }
+  return true
+})
+
+// Open file / folder
 ipcMain.handle('open-file', (event, filePath) => shell.openPath(filePath))
 ipcMain.handle('open-folder', (event, filePath) => shell.showItemInFolder(filePath))
+ipcMain.handle('delete-file', async (event, filePath) => {
+  try {
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath)
+      return { success: true }
+    }
+  } catch (err) {
+    console.error('Failed to delete file:', err)
+    return { success: false, error: err.message }
+  }
+  return { success: false, error: 'File not found' }
+})
+ipcMain.handle('show-confirm-dialog', async (event, message, detail) => {
+  const result = await dialog.showMessageBox(mainWindow, {
+    type: 'question',
+    buttons: ['Cancel', 'Yes, Delete'],
+    defaultId: 0,
+    title: 'Confirm Delete',
+    message: message,
+    detail: detail
+  })
+  return result.response === 1
+})
 ipcMain.handle('open-external', (event, url) => shell.openExternal(url))
 ipcMain.handle('open-extension-folder', () => {
   let extensionPath = app.isPackaged 

@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react'
-import { Download, X, Video, PlayCircle, Loader2, Link as LinkIcon, Clipboard, ArrowDownToLine, Film, Camera, Music2, MessageCircle, FolderOpen, Clock, RefreshCcw, AlertCircle, SlidersHorizontal, Minus, Plus, Scissors } from 'lucide-react'
+import { Download, X, Video, PlayCircle, Loader2, Link as LinkIcon, Clipboard, ArrowDownToLine, Film, Camera, Music2, MessageCircle, FolderOpen, Clock, RefreshCcw, AlertCircle, SlidersHorizontal, Minus, Plus, Scissors, Sparkles } from 'lucide-react'
 import { motion, AnimatePresence } from 'motion/react'
 import TimeInput from '../components/TimeInput'
 import TimelineSlider from '../components/TimelineSlider'
 
-export default function DownloaderView({ triggerToast }) {
+export default function DownloaderView({ triggerToast, isPro, setShowPayModal, setPayModalReason }) {
   const [url, setUrl] = useState('')
   const [downloads, setDownloads] = useState([])
   const [activeFilter, setActiveFilter] = useState('all')
@@ -327,6 +327,22 @@ export default function DownloaderView({ triggerToast }) {
     e.preventDefault()
     if (!url.trim()) return
 
+    // Pro Tier Interception
+    if (!isPro) {
+      if (quality === '4K') {
+        triggerToast('Blocked: 4K video downloads are a Pro feature.')
+        setPayModalReason('Native 4K video downloads are a Pro feature.')
+        setShowPayModal(true)
+        return
+      }
+      if (startTime.trim() || endTime.trim()) {
+        triggerToast('Blocked: High-speed clipping is a Pro feature.')
+        setPayModalReason('Advanced high-speed video clipping is a Pro feature.')
+        setShowPayModal(true)
+        return
+      }
+    }
+
     const id = Date.now().toString()
     const newDownload = {
       id,
@@ -361,10 +377,15 @@ export default function DownloaderView({ triggerToast }) {
 
   const handlePaste = async () => {
     try {
-      const text = await navigator.clipboard.readText()
-      if (text) setUrl(text)
+      let text = '';
+      if (window.electronAPI && window.electronAPI.readClipboard) {
+        text = await window.electronAPI.readClipboard();
+      } else {
+        text = await navigator.clipboard.readText();
+      }
+      if (text) setUrl(text);
     } catch {
-      triggerToast('Could not read clipboard')
+      triggerToast('Could not read clipboard');
     }
   }
 
@@ -404,158 +425,221 @@ export default function DownloaderView({ triggerToast }) {
   ]
 
   return (
-    <div className="w-full flex flex-col flex-1 min-h-0 animate-in fade-in duration-300" style={{ gap: '22px' }}>
+    <div className="w-full flex flex-col flex-1 animate-in fade-in duration-300 mx-auto" style={{ gap: '22px', maxWidth: '1000px', padding: '32px 48px', alignSelf: 'center' }}>
       
-      {/* Header */}
-      <div>
-        <h1 className="page-title">
-          <Video size={20} style={{ color: '#818cf8' }} />
+      {/* Page Header */}
+      <div className="page-header w-full mb-6" style={{ alignItems: 'flex-start', textAlign: 'left' }}>
+        <h1 className="page-title" style={{ justifyContent: 'flex-start' }}>
+          <Video size={24} color="#818cf8" />
           Video Downloader
         </h1>
         <p className="subtitle">Download high-quality videos & audio directly to your local library</p>
       </div>
 
-      {/* Supported Platforms */}
-      <div className="supported-platforms shrink-0">
-        <span>Supported Platforms:</span>
-        <span className="platform-pill"><Film size={12} color="#ef4444" /> YouTube</span>
-        <span className="platform-pill"><Camera size={12} color="#ec4899" /> Instagram</span>
-        <span className="platform-pill"><Music2 size={12} color="#06b6d4" /> TikTok</span>
-        <span className="platform-pill"><MessageCircle size={12} color="#38bdf8" /> X / Twitter</span>
+      {/* Platforms Ribbon with Crisp Vector Brand SVGs */}
+      <div className="platforms-ribbon shrink-0">
+        <span className="platforms-label">Supported Platforms:</span>
+        <div className="platforms-list">
+          <div className="platform-tag">
+            <svg className="brand-svg" viewBox="0 0 24 24" fill="none">
+              <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814z" fill="#FF0000"/>
+              <path d="M9.545 15.568V8.432L15.818 12l-6.273 3.568z" fill="#ffffff"/>
+            </svg>
+            <span>YouTube</span>
+          </div>
+          <div className="platform-tag">
+            <svg className="brand-svg" viewBox="0 0 24 24" fill="none">
+              <defs>
+                <radialGradient id="ig-grad" cx="20%" cy="105%" r="115%">
+                  <stop offset="0%" stopColor="#fdf497"/>
+                  <stop offset="15%" stopColor="#fdf497"/>
+                  <stop offset="45%" stopColor="#fd5949"/>
+                  <stop offset="60%" stopColor="#d6249f"/>
+                  <stop offset="90%" stopColor="#285AEB"/>
+                </radialGradient>
+              </defs>
+              <rect x="2" y="2" width="20" height="20" rx="5.5" fill="url(#ig-grad)"/>
+              <rect x="5.5" y="5.5" width="13" height="13" rx="3.5" stroke="#ffffff" strokeWidth="1.6" fill="none"/>
+              <circle cx="12" cy="12" r="3.2" stroke="#ffffff" strokeWidth="1.6" fill="none"/>
+              <circle cx="16.3" cy="7.7" r="0.8" fill="#ffffff"/>
+            </svg>
+            <span>Instagram</span>
+          </div>
+          <div className="platform-tag">
+            <svg className="brand-svg" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12.525.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.05-2.89-.35-4.2-.97-.57-.26-1.1-.59-1.62-.93-.01 2.92.01 5.84-.02 8.75-.08 1.4-.54 2.79-1.35 3.94-1.31 1.92-3.58 3.17-5.91 3.21-1.43.08-2.86-.31-4.08-1.03-2.02-1.19-3.44-3.37-3.65-5.71-.02-.5-.03-1-.01-1.49.18-1.9 1.12-3.72 2.58-4.96 1.66-1.44 3.98-2.13 6.15-1.72.02 1.48-.04 2.96-.04 4.44-.99-.32-2.15-.23-3.02.37-.63.41-1.11 1.04-1.36 1.75-.21.51-.24 1.07-.14 1.61.24 1.64 1.82 3.02 3.5 2.87 1.12-.01 2.19-.66 2.77-1.61.19-.33.4-.67.41-1.06.1-1.79.06-3.57.07-5.36.01-4.03-.01-8.05.02-12.07z" fill="#00f2fe"/>
+              <path d="M12.525.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.05-2.89-.35-4.2-.97-.57-.26-1.1-.59-1.62-.93-.01 2.92.01 5.84-.02 8.75-.08 1.4-.54 2.79-1.35 3.94-1.31 1.92-3.58 3.17-5.91 3.21-1.43.08-2.86-.31-4.08-1.03-2.02-1.19-3.44-3.37-3.65-5.71-.02-.5-.03-1-.01-1.49.18-1.9 1.12-3.72 2.58-4.96 1.66-1.44 3.98-2.13 6.15-1.72.02 1.48-.04 2.96-.04 4.44-.99-.32-2.15-.23-3.02.37-.63.41-1.11 1.04-1.36 1.75-.21.51-.24 1.07-.14 1.61.24 1.64 1.82 3.02 3.5 2.87 1.12-.01 2.19-.66 2.77-1.61.19-.33.4-.67.41-1.06.1-1.79.06-3.57.07-5.36.01-4.03-.01-8.05.02-12.07z" fill="#fe2c55" style={{ mixBlendMode: 'screen' }}/>
+            </svg>
+            <span>TikTok</span>
+          </div>
+          <div className="platform-tag">
+            <svg className="brand-svg" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" fill="#f8fafc"/>
+            </svg>
+            <span>X / Twitter</span>
+          </div>
+          <div className="platform-tag">
+            <svg className="brand-svg" viewBox="0 0 24 24" fill="none">
+              <circle cx="12" cy="12" r="11" fill="#1877F2"/>
+              <path d="M13.5 22V13.8h2.8l.4-3.2h-3.2V8.6c0-.9.3-1.6 1.6-1.6h1.7V4.2c-.3 0-1.4-.1-2.6-.1-2.6 0-4.4 1.6-4.4 4.5v2H7v3.2h2.8V22h3.7z" fill="#ffffff"/>
+            </svg>
+            <span>Facebook</span>
+          </div>
+        </div>
       </div>
 
-      {/* Sub-tabs for VOD vs Live */}
-      <div className="flex gap-2 mb-2 p-1 bg-white/5 rounded-xl border border-white/5 w-max">
-        <button
+      {/* Video Mode Toggle */}
+      <div className="mode-switch relative">
+        <button 
           type="button"
           onClick={() => setActiveMode('vod')}
-          className={`px-4 py-1.5 rounded-lg text-[11px] font-bold tracking-wide transition-all ${
-            activeMode === 'vod' 
-              ? 'bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 shadow-lg shadow-indigo-500/10' 
-              : 'text-slate-400 hover:text-white hover:bg-white/5 border border-transparent'
-          }`}
+          className={`mode-btn relative z-10 ${activeMode === 'vod' ? 'active' : ''}`}
         >
-          🎬 Standard Video
+          {activeMode === 'vod' && (
+            <motion.div 
+              layoutId="mode-pill-dl" 
+              className="absolute inset-0 bg-[#252843] rounded-[7px] border border-white/5"
+              style={{ zIndex: -1 }}
+              transition={{ type: 'spring', bounce: 0.2, duration: 0.5 }}
+            />
+          )}
+          <Film size={14} color={activeMode === 'vod' ? "#818cf8" : "currentColor"} />
+          Standard Video
         </button>
-        <button
+        <button 
           type="button"
           onClick={() => setActiveMode('live')}
-          className={`px-4 py-1.5 rounded-lg text-[11px] font-bold tracking-wide transition-all flex items-center gap-2 ${
-            activeMode === 'live' 
-              ? 'bg-red-500/20 text-red-400 border border-red-500/30 shadow-lg shadow-red-500/10' 
-              : 'text-slate-400 hover:text-white hover:bg-white/5 border border-transparent'
-          }`}
+          className={`mode-btn relative z-10 ${activeMode === 'live' ? 'active' : ''}`}
         >
+          {activeMode === 'live' && (
+            <motion.div 
+              layoutId="mode-pill-dl" 
+              className="absolute inset-0 bg-[#252843] rounded-[7px] border border-white/5"
+              style={{ zIndex: -1 }}
+              transition={{ type: 'spring', bounce: 0.2, duration: 0.5 }}
+            />
+          )}
           <div className={`w-1.5 h-1.5 rounded-full ${activeMode === 'live' ? 'bg-red-500 animate-pulse' : 'bg-slate-500'}`} />
-          🔴 Live Broadcast
+          Live Broadcast
         </button>
       </div>
 
-      {/* URL Input Card */}
-      <form onSubmit={handleDownload} className="flex flex-col flex-1" style={{ minHeight: 'calc(100vh - 240px)' }}>
-        <div className={`input-wrapper shrink-0 ${isFetchingInfo ? 'fetching' : ''}`}>
-          <div className="url-field">
-            <LinkIcon size={16} style={{ color: '#64748b' }} />
-            <input 
-              type="text" 
-              placeholder={activeMode === 'live' ? "Paste an active live stream URL here..." : "Paste YouTube, TikTok, X, or IG video link..."} 
-              spellCheck="false"
-              value={url}
-              onChange={(e) => setUrl(e.target.value)}
-              readOnly={isFetchingInfo}
-            />
+      <form onSubmit={handleDownload} className="flex flex-col flex-1 w-full">
+        {/* All-in-One Download Input Bar */}
+        <div className={`download-bar shrink-0 ${isFetchingInfo ? 'opacity-70 pointer-events-none' : ''}`}>
+          <LinkIcon className="link-icon" size={18} />
+          <input 
+            type="text" 
+            className="url-input" 
+            placeholder={activeMode === 'live' ? "Paste an active live stream URL here..." : "Paste YouTube, TikTok, X, or IG video link..."} 
+            spellCheck="false"
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            onContextMenu={(e) => { e.preventDefault(); handlePaste(); }}
+            onKeyDown={(e) => {
+              if (e.key.toLowerCase() === 'v' && (e.ctrlKey || e.metaKey)) {
+                e.preventDefault();
+                handlePaste();
+              }
+            }}
+            readOnly={isFetchingInfo}
+          />
+          <div className="bar-controls">
+            <select 
+              className="quality-select"
+              value={quality} 
+              onChange={(e) => {
+                const val = e.target.value;
+                if (val === 'best' && !isPro) {
+                  setPayModalReason('4K & 8K Resolution');
+                  setShowPayModal(true);
+                  return;
+                }
+                setQuality(val);
+              }}
+            >
+              <option value="best">4K Ultra HD (Pro)</option>
+              <option value="1080">1080p HD</option>
+              <option value="720">720p HD</option>
+              <option value="audio">Audio Only (MP3)</option>
+            </select>
+            <button type="button" className="btn-paste" onClick={handlePaste}>
+              <Clipboard size={14} /> Paste
+            </button>
+            <button type="submit" className="btn-download" disabled={!url.trim() || isFetchingInfo}>
+              {isFetchingInfo ? <Loader2 size={15} className="spinner animate-spin" /> : <ArrowDownToLine size={15} />}
+              {isFetchingInfo ? 'Loading...' : 'Download'}
+            </button>
           </div>
-          
-          <select className="quality-select" value={quality} onChange={(e) => setQuality(e.target.value)}>
-            <option value="best" className="bg-[#1a1b2f]">4K Ultra HD</option>
-            <option value="1080" className="bg-[#1a1b2f]">1080p HD</option>
-            <option value="720" className="bg-[#1a1b2f]">720p HD</option>
-            <option value="audio" className="bg-[#1a1b2f]">MP3 Audio Only</option>
-          </select>
-
-          <button type="button" className="paste-btn" onClick={handlePaste}>
-            <Clipboard size={14} />
-            Paste
-          </button>
-
-          <button type="submit" className={`download-btn ${isFetchingInfo ? 'btn-download-fetching' : ''}`} disabled={!url.trim() || isFetchingInfo}>
-            {isFetchingInfo ? <Loader2 size={15} className="spinner" /> : <Download size={15} />}
-            {isFetchingInfo ? 'Loading...' : 'Download'}
-          </button>
         </div>
         
         {/* Rich Preview & Timestamps */}
-        <AnimatePresence mode="popLayout">
-          {(isFetchingInfo || videoInfo || fetchError) ? (
-            <motion.div
-              key="preview-card"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="mt-4 flex flex-col flex-1 min-h-0"
-            >
-              {isFetchingInfo ? (
-                <div className="flex flex-col w-full max-w-[840px]">
-                  <div className="status-indicator">
-                    <Loader2 size={16} className="spinner" />
-                    Fetching video details...
-                  </div>
-                  <div className="skeleton-stage">
-                    <div className="skeleton-video-area shimmer-bg">
-                      <Video size={64} className="skeleton-icon" />
-                    </div>
-                    <div className="skeleton-info-bar">
-                      <div className="skel-line skel-title shimmer-bg"></div>
-                      <div className="skel-line skel-sub shimmer-bg"></div>
-                    </div>
-                  </div>
+        <div className="stage-wrapper mt-6 flex flex-col flex-1 w-full relative">
+          {isFetchingInfo ? (
+            <div className="fetching-stage" style={{ display: 'flex' }}>
+              <div className="loader-ring-wrap">
+                <div className="loader-ring"></div>
+                <div className="loader-center-icon">
+                  <Sparkles size={20} />
                 </div>
-              ) : fetchError ? (
-                <div className="flex items-center justify-center p-6 bg-red-500/10 rounded-2xl border border-red-500/20 text-red-400 gap-2 text-sm text-center font-medium">
-                  <AlertCircle size={16} className="shrink-0" />
-                  <div className="break-words max-w-xl">{fetchError}</div>
-                </div>
-              ) : videoInfo && (
-                  <>
-                    <div className="player-theater-stage" ref={stageRef}>
-                      <div className="player-card-adaptive" ref={playerCardRef}>
-                        <div className="video-viewport-16-9">
-                          <AnimatePresence>
-                        {countdown !== null && (
-                          <motion.div 
-                            className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md pointer-events-none"
-                            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                          >
-                            <motion.div
-                              key={countdown}
-                              initial={{ scale: 0.2, opacity: 0 }}
-                              animate={{ scale: 1, opacity: 1 }}
-                              exit={{ scale: 1.5, opacity: 0 }}
-                              transition={{ type: 'spring', duration: 0.5 }}
-                              className="text-[12rem] font-black text-white drop-shadow-[0_0_30px_rgba(239,68,68,0.8)] leading-none"
-                            >
-                              {countdown}
-                            </motion.div>
-                          </motion.div>
-                        )}
-                      </AnimatePresence>
-                      
-                      {recordingStartTime && (
-                        <div className="absolute top-4 right-4 z-50 flex items-center gap-2 bg-black/60 backdrop-blur-sm px-4 py-2 rounded-full border border-red-500/30 pointer-events-none">
-                          <div className="w-3 h-3 rounded-full bg-red-500 animate-pulse shadow-[0_0_10px_rgba(239,68,68,0.8)]" />
-                          <span className="text-red-400 font-bold tracking-widest text-sm">REC</span>
-                        </div>
-                      )}
-                      {videoInfo.extractor === 'Youtube' && videoInfo.isLive ? (
-                        <webview 
-                          ref={webviewRef}
-                          src={`data:text/html;charset=utf-8,${encodeURIComponent(`
-                            <html>
-                              <body style="margin:0;background:black;overflow:hidden;display:flex;align-items:center;justify-content:center">
-                                <video id="video" width="100%" height="100%" autoplay></video>
-                                <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
-                                <script>
-                                  var video = document.getElementById('video');
+              </div>
+
+              <div className="fetching-text-group">
+                <div className="fetching-title">Fetching video metadata...</div>
+                <div className="fetching-sub">Resolving stream for: {url || 'active link'}</div>
+              </div>
+
+              {/* Animated Shimmer Bar */}
+              <div className="skeleton-strip">
+                <div className="skeleton-shimmer"></div>
+              </div>
+            </div>
+          ) : fetchError ? (
+            <div className="flex items-center justify-center p-6 bg-red-500/10 rounded-2xl border border-red-500/20 text-red-400 gap-2 text-sm text-center font-medium">
+              <AlertCircle size={16} className="shrink-0" />
+              <div className="break-words max-w-xl">{fetchError}</div>
+            </div>
+          ) : videoInfo ? (
+              <>
+                <div className="player-theater-stage" ref={stageRef}>
+                  <div className="player-card-adaptive" ref={playerCardRef}>
+                    <div className="video-viewport-16-9">
+                      <AnimatePresence>
+                    {countdown !== null && (
+                      <motion.div 
+                        className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md pointer-events-none"
+                        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                      >
+                        <motion.div
+                          key={countdown}
+                          initial={{ scale: 0.2, opacity: 0 }}
+                          animate={{ scale: 1, opacity: 1 }}
+                          exit={{ scale: 1.5, opacity: 0 }}
+                          transition={{ type: 'spring', duration: 0.5 }}
+                          className="text-[12rem] font-black text-white drop-shadow-[0_0_30px_rgba(239,68,68,0.8)] leading-none"
+                        >
+                          {countdown}
+                        </motion.div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                  
+                  {recordingStartTime && (
+                    <div className="absolute top-4 right-4 z-50 flex items-center gap-2 bg-black/60 backdrop-blur-sm px-4 py-2 rounded-full border border-red-500/30 pointer-events-none">
+                      <div className="w-3 h-3 rounded-full bg-red-500 animate-pulse shadow-[0_0_10px_rgba(239,68,68,0.8)]" />
+                      <span className="text-red-400 font-bold tracking-widest text-sm">REC</span>
+                    </div>
+                  )}
+                  {videoInfo.extractor === 'Youtube' && videoInfo.isLive ? (
+                    <webview 
+                      ref={webviewRef}
+                      src={`data:text/html;charset=utf-8,${encodeURIComponent(`
+                        <html>
+                          <body style="margin:0;background:black;overflow:hidden;display:flex;align-items:center;justify-content:center">
+                            <video id="video" width="100%" height="100%" autoplay></video>
+                            <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+                            <script>
+                              var video = document.getElementById('video');
                                   var url = "${videoInfo.manifestUrl}";
                                   if (Hls.isSupported()) {
                                     var hls = new Hls();
@@ -892,14 +976,22 @@ export default function DownloaderView({ triggerToast }) {
                     </div>
                   )}
                   </>
-                )}
-            </motion.div>
-          ) : null}
-        </AnimatePresence>
+          ) : (
+            <div className="empty-state" style={{ display: 'flex' }}>
+              <div className="empty-icon-box">
+                <ArrowDownToLine size={22} />
+              </div>
+              <div className="empty-title">Ready for downloads</div>
+              <p className="empty-desc">Paste any video URL above to extract high-bitrate media directly to your drive.</p>
+            </div>
+          )}
+        </div>
       </form>
 
-      {/* Recent Downloads Section Header */}
-      <div className="history-header shrink-0">
+      {downloads.length > 0 && (
+        <>
+          {/* Recent Downloads Section Header */}
+          <div className="history-header shrink-0">
         <h2>Active & Recent Downloads</h2>
         <div className="history-controls">
           <button
@@ -926,43 +1018,9 @@ export default function DownloaderView({ triggerToast }) {
         </div>
       </div>
 
-      {/* Downloads List or Empty State */}
+      {/* Downloads List */}
       <div className="flex flex-col shrink-0 pr-1 pb-8" style={{ gap: '12px' }}>
         <AnimatePresence>
-          {filteredDownloads.length === 0 && (
-            <motion.div 
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="flex-1 flex flex-col items-center justify-center text-center"
-              style={{
-                border: '1px dashed rgba(255,255,255,0.08)',
-                borderRadius: '16px',
-                background: 'rgba(255,255,255,0.015)',
-                padding: '32px',
-                gap: '12px',
-                minHeight: '180px',
-              }}
-            >
-              <div 
-                className="flex items-center justify-center"
-                style={{
-                  width: '54px',
-                  height: '54px',
-                  borderRadius: '50%',
-                  background: 'rgba(99,102,241,0.08)',
-                  border: '1px solid rgba(99,102,241,0.2)',
-                  color: '#818cf8',
-                }}
-              >
-                <ArrowDownToLine size={24} />
-              </div>
-              <div style={{ fontSize: '0.95rem', fontWeight: 600, color: '#e2e8f0' }}>No downloads in progress</div>
-              <p style={{ fontSize: '0.8rem', color: '#94a3b8', maxWidth: '260px', lineHeight: 1.4 }}>
-                Paste a valid video or reel link above and click Download to save it locally.
-              </p>
-            </motion.div>
-          )}
-
           {filteredDownloads.map(download => (
             <motion.div 
               key={download.id}
@@ -1109,6 +1167,8 @@ export default function DownloaderView({ triggerToast }) {
           ))}
         </AnimatePresence>
       </div>
+        </>
+      )}
     </div>
   )
 }

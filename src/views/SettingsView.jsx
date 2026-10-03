@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react'
 import { Folder, Trash2, Globe, ExternalLink, Check, Copy, FolderOpen, Sparkles } from 'lucide-react'
 
-export default function SettingsView({ onSettingsChanged, triggerToast, onLicenseChanged }) {
+export default function SettingsView({ onSettingsChanged, triggerToast }) {
   const [displayName, setDisplayName] = useState('My PC')
   const [savePath, setSavePath] = useState('')
   const [autoAccept, setAutoAccept] = useState(false)
   const [notifications, setNotifications] = useState(true)
   const [startWithWindows, setStartWithWindows] = useState(false)
+  const [enableGlobalHotkey, setEnableGlobalHotkey] = useState(true)
   
   const [originalSettings, setOriginalSettings] = useState(null)
   
@@ -14,39 +15,29 @@ export default function SettingsView({ onSettingsChanged, triggerToast, onLicens
   const [showExtensionGuide, setShowExtensionGuide] = useState(false)
   const [copyText, setCopyText] = useState('Copy')
 
-  const [licenseStatus, setLicenseStatus] = useState({ isPro: false, expiresAt: null })
-  const [licenseKey, setLicenseKey] = useState('')
-  const [isActivating, setIsActivating] = useState(false)
 
-  const handleCopy = () => {
-    navigator.clipboard.writeText('chrome://extensions')
-    setCopyText('Copied!')
-    setTimeout(() => setCopyText('Copy'), 2000)
-  }
-
-  const hasChanges = originalSettings !== null && JSON.stringify({ displayName, savePath, autoAccept, notifications, startWithWindows }) !== JSON.stringify(originalSettings)
 
   const loadSettings = () => {
     if (window.electronAPI) {
       Promise.all([
         window.electronAPI.getSettings(),
-        window.electronAPI.getStartup ? window.electronAPI.getStartup() : Promise.resolve(false),
-        window.electronAPI.getLicenseStatus ? window.electronAPI.getLicenseStatus() : Promise.resolve({ isPro: false })
-      ]).then(([settings, startup, lStatus]) => {
+        window.electronAPI.getStartup ? window.electronAPI.getStartup() : Promise.resolve(false)
+      ]).then(([settings, startup]) => {
         const loaded = {
           displayName: settings.displayName || 'My PC',
           savePath: settings.savePath || '',
           autoAccept: settings.autoAccept || false,
           notifications: settings.notifications !== false,
-          startWithWindows: startup
+          startWithWindows: startup,
+          enableGlobalHotkey: settings.enableGlobalHotkey !== false
         }
         setDisplayName(loaded.displayName)
         setSavePath(loaded.savePath)
         setAutoAccept(loaded.autoAccept)
         setNotifications(loaded.notifications)
         setStartWithWindows(loaded.startWithWindows)
+        setEnableGlobalHotkey(loaded.enableGlobalHotkey)
         setOriginalSettings(loaded)
-        setLicenseStatus(lStatus)
       })
     }
   }
@@ -58,30 +49,13 @@ export default function SettingsView({ onSettingsChanged, triggerToast, onLicens
   const handleSelectFolder = async () => {
     if (window.electronAPI && window.electronAPI.pickFolder) {
       const folder = await window.electronAPI.pickFolder()
-      if (folder) setSavePath(folder)
+      if (folder) {
+        setSavePath(folder)
+        updateSetting('savePath', folder)
+      }
     } else {
       triggerToast('File picker opened… (Browser demo)')
     }
-  }
-
-  const handleSave = () => {
-    const newSettings = { displayName, savePath, autoAccept, notifications, startWithWindows }
-    if (window.electronAPI) {
-      window.electronAPI.saveSettings(newSettings)
-      if (window.electronAPI.setStartup) {
-        window.electronAPI.setStartup(startWithWindows)
-      }
-    }
-    if (onSettingsChanged) {
-      onSettingsChanged(newSettings)
-    }
-    setOriginalSettings(newSettings)
-    triggerToast('Settings saved.')
-  }
-
-  const handleDiscard = () => {
-    loadSettings()
-    triggerToast('Changes discarded.')
   }
 
   const handleClearHistory = () => {
@@ -92,295 +66,225 @@ export default function SettingsView({ onSettingsChanged, triggerToast, onLicens
     }
   }
 
-  const handleActivate = async () => {
-    if (!licenseKey.trim() || !window.electronAPI || !window.electronAPI.getLicenseStatus) return
-    setIsActivating(true)
-    try {
-      const result = await window.electronAPI.activateLicense(licenseKey.trim())
-      if (result.success) {
-        triggerToast('License activated successfully!')
-        const updatedStatus = await window.electronAPI.getLicenseStatus()
-        setLicenseStatus(updatedStatus)
-        if (onLicenseChanged) onLicenseChanged(updatedStatus)
-      } else {
-        triggerToast(`Activation failed: ${result.error}`)
-      }
-    } catch (err) {
-      triggerToast(`Activation error: ${err.message}`)
-    } finally {
-      setIsActivating(false)
-    }
-  }
 
-  const handleDeactivate = async () => {
-    if (!window.electronAPI || !window.electronAPI.getLicenseStatus) return
-    setIsActivating(true)
-    try {
-      const result = await window.electronAPI.deactivateLicense()
-      if (result.success) {
-        triggerToast('License deactivated.')
-        const updatedStatus = await window.electronAPI.getLicenseStatus()
-        setLicenseStatus(updatedStatus)
-        if (onLicenseChanged) onLicenseChanged(updatedStatus)
-      } else {
-        triggerToast(`Deactivation failed: ${result.error}`)
-      }
-    } catch (err) {
-      triggerToast(`Deactivation error: ${err.message}`)
-    } finally {
-      setIsActivating(false)
-    }
-  }
 
-  // Toggle helper for accessibility
-  const handleToggle = (e, setter, value) => {
-    if (e.type === 'click' || (e.type === 'keydown' && (e.key === ' ' || e.key === 'Enter'))) {
-      e.preventDefault()
-      setter(!value)
+  const updateSetting = (key, value) => {
+    const newSettings = {
+      displayName,
+      savePath,
+      autoAccept,
+      notifications,
+      startWithWindows,
+      enableGlobalHotkey,
+      [key]: value
     }
+    
+    if (key === 'displayName') setDisplayName(value)
+    if (key === 'savePath') setSavePath(value)
+    if (key === 'autoAccept') setAutoAccept(value)
+    if (key === 'notifications') setNotifications(value)
+    if (key === 'startWithWindows') setStartWithWindows(value)
+    if (key === 'enableGlobalHotkey') setEnableGlobalHotkey(value)
+
+    if (window.electronAPI) {
+      window.electronAPI.saveSettings(newSettings)
+      if (key === 'startWithWindows' && window.electronAPI.setStartup) {
+        window.electronAPI.setStartup(value)
+      }
+    }
+    if (onSettingsChanged) {
+      onSettingsChanged(newSettings)
+    }
+    setOriginalSettings(newSettings)
   }
 
   return (
-    <section id="screen-settings" aria-labelledby="settings-title" className="pb-10 pt-4">
-      
-      <div 
-        className="unsaved-bar-container"
-        style={{
-          height: hasChanges ? '60px' : '0px',
-          opacity: hasChanges ? 1 : 0,
-          marginBottom: hasChanges ? '24px' : '0px',
-          borderWidth: hasChanges ? '1px' : '0px'
-        }}
-      >
-        <div className="unsaved-bar-inner">
-          <div className="unsaved-text">Careful — you have unsaved changes!</div>
-          <div className="unsaved-actions">
-            <button className="btn-cancel" onClick={handleDiscard}>Discard</button>
-            <button className="btn-save" onClick={handleSave}>
-              <Check size={14} /> Save changes
+    <section className="content-area" style={{ height: '100%', overflowY: 'auto', padding: '32px 48px' }}>
+      <div className="page-header w-full mb-6" style={{ alignItems: 'flex-start', textAlign: 'left' }}>
+        <h1 className="page-title" style={{ justifyContent: 'flex-start' }}>Settings</h1>
+        <p className="subtitle">Manage preferences, transfer destinations, integrations, and privacy</p>
+      </div>
+
+      <div className="settings-stack">
+        {/* 1. Browser Extension */}
+        <div className="settings-card">
+          <div className="card-header-row">
+            <span className="section-tag">
+              <svg style={{ width: '13px', height: '13px', color: 'currentColor' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="10"></circle>
+                <circle cx="12" cy="12" r="4"></circle>
+                <line x1="21.17" y1="8" x2="12" y2="8"></line>
+                <line x1="3.95" y1="6.06" x2="8.54" y2="14"></line>
+                <line x1="10.88" y1="21.94" x2="15.46" y2="14"></line>
+              </svg>
+              Chrome & Edge Extension
+            </span>
+          </div>
+          <div className="setting-row">
+            <div className="setting-info">
+              <h4>Install Browser Extension</h4>
+              <p>Send video and slide links directly to GrabCut with a single click</p>
+            </div>
+            <button className="btn btn-secondary" onClick={() => setShowExtensionGuide(true)}>
+              <ExternalLink style={{ width: '14px', height: '14px' }} />
+              How to Install
             </button>
           </div>
         </div>
-      </div>
 
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-slate-100 tracking-tight">Settings</h1>
-        <p className="text-slate-400 text-sm mt-1">Manage your GrabCut preferences.</p>
-      </div>
 
-      <div className="settings-group mb-6 border-indigo-500/20 bg-indigo-500/5">
-        <div className="settings-group-header text-indigo-400 border-indigo-500/20 flex items-center gap-2">
-          <Globe size={16} /> Chrome Extension
-        </div>
-        <div className="setting-row" style={{ borderBottom: 'none' }}>
-          <div className="setting-text">
-            <div className="setting-label text-indigo-100">Install Browser Extension</div>
-            <div className="setting-desc text-indigo-200/70">Send video links instantly to GrabCut with a single click.</div>
-          </div>
-          <div className="setting-control">
-            <button 
-              className="download-btn"
-              onClick={() => setShowExtensionGuide(true)}
-            >
-              How to Install <ExternalLink size={14} />
-            </button>
-          </div>
-        </div>
-      </div>
 
-      <div className={`settings-group mb-6 ${licenseStatus.isPro ? 'border-green-500/20 bg-green-500/5' : 'border-amber-500/20 bg-amber-500/5'}`}>
-        <div className={`settings-group-header ${licenseStatus.isPro ? 'text-green-400 border-green-500/20' : 'text-amber-400 border-amber-500/20'} flex items-center gap-2`}>
-          License & Activation
-          {licenseStatus.isPro ? (
-            <span className="tier-badge badge-pro"><Sparkles size={12} /> Pro</span>
-          ) : (
-            <span className="tier-badge badge-free">Free</span>
-          )}
-        </div>
-        {licenseStatus.isPro ? (
-          <div className="setting-row" style={{ borderBottom: 'none' }}>
-            <div className="setting-text">
-              <div className="setting-label text-green-100">GrabCut Pro is Unlocked</div>
-              <div className="setting-desc text-green-200/70">
-                You have access to 4K exports, 8-connection parallel downloads, and the full intelligent trimmer.
-              </div>
-            </div>
-            <div className="setting-control flex gap-2">
-              <button 
-                className="deactivate-btn"
-                onClick={handleDeactivate}
-                disabled={isActivating}
-              >
-                {isActivating ? 'Deactivating...' : 'Deactivate License'}
-              </button>
-            </div>
+        {/* 3. Network Identity */}
+        <div className="settings-card">
+          <div className="card-header-row">
+            <span className="section-tag">
+              <Globe style={{ width: '13px', height: '13px' }} />
+              Network & Local Identity
+            </span>
           </div>
-        ) : (
-          <div className="setting-row" style={{ borderBottom: 'none' }}>
-            <div className="setting-text">
-              <div className="setting-label text-amber-100">Activate GrabCut Pro</div>
-              <div className="setting-desc text-amber-200/70">
-                Enter your license key to unlock 4K video exports, advanced routing, and unlimited connections.
-              </div>
+          <div className="setting-row">
+            <div className="setting-info">
+              <h4>Display Name</h4>
+              <p>How this device appears to others on the local network</p>
             </div>
-            <div className="setting-control flex gap-2 flex-1 max-w-[300px]">
+            <div className="input-group">
               <input 
-                className="text-input flex-1" 
                 type="text" 
-                placeholder="XXXX-XXXX-XXXX-XXXX"
-                value={licenseKey} 
-                onChange={e => setLicenseKey(e.target.value)}
-                disabled={isActivating}
-                style={{ borderColor: 'rgba(245, 158, 11, 0.3)' }}
+                className="text-input" 
+                value={displayName} 
+                onChange={(e) => updateSetting('displayName', e.target.value)}
               />
-              <button 
-                className="download-btn"
-                onClick={handleActivate}
-                disabled={isActivating || !licenseKey.trim()}
-              >
-                {isActivating ? 'Activating...' : 'Activate'}
+            </div>
+          </div>
+        </div>
+
+        {/* 4. Incoming Files & Automation */}
+        <div className="settings-card">
+          <div className="card-header-row">
+            <span className="section-tag">
+              <Folder style={{ width: '13px', height: '13px' }} />
+              Incoming Files & Transfers
+            </span>
+          </div>
+
+          {/* Save Destination */}
+          <div className="setting-row">
+            <div className="setting-info">
+              <h4>Save files to</h4>
+              <p>Received transfers are automatically placed into this local folder</p>
+            </div>
+            <div className="input-group">
+              <input type="text" className="text-input path-input" value={savePath} readOnly />
+              <button className="btn btn-secondary" title="Browse Folder" onClick={handleSelectFolder}>
+                <FolderOpen style={{ width: '14px', height: '14px' }} />
+                Change
               </button>
             </div>
           </div>
-        )}
-      </div>
 
-      <div className="settings-group">
-        <div className="settings-group-header">Identity</div>
-        <div className="setting-row">
-          <div className="setting-text">
-            <div className="setting-label">Display name</div>
-            <div className="setting-desc">How you appear to others on the network. Use something your colleagues will recognize.</div>
+          {/* Auto Accept Toggle */}
+          <div className="setting-row divider">
+            <div className="setting-info">
+              <h4>Auto-accept all incoming files</h4>
+              <p>Save incoming transfers automatically without showing a confirmation prompt</p>
+            </div>
+            <div className="switch-control">
+              <span className={`switch-state-label ${autoAccept ? 'active' : ''}`}>{autoAccept ? 'On' : 'Off'}</span>
+              <label className="toggle-switch">
+                <input 
+                  type="checkbox" 
+                  checked={autoAccept} 
+                  onChange={(e) => updateSetting('autoAccept', e.target.checked)} 
+                />
+                <span className="slider"></span>
+              </label>
+            </div>
           </div>
-          <div className="setting-control">
-            <input 
-              className="text-input" 
-              type="text" 
-              value={displayName} 
-              onChange={e => setDisplayName(e.target.value)}
-              aria-label="Display name" 
-            />
-          </div>
-        </div>
-      </div>
 
-      <div className="settings-group">
-        <div className="settings-group-header">Incoming files</div>
-        <div className="setting-row">
-          <div className="setting-text">
-            <div className="setting-label">Save files to</div>
-            <div className="setting-desc">Incoming files are saved here automatically. You can open them from the History tab.</div>
+          {/* Notifications Toggle */}
+          <div className="setting-row divider">
+            <div className="setting-info">
+              <h4>Show transfer notifications</h4>
+              <p>Get an alert when a file finishes transferring</p>
+            </div>
+            <div className="switch-control">
+              <span className={`switch-state-label ${notifications ? 'active' : ''}`}>{notifications ? 'On' : 'Off'}</span>
+              <label className="toggle-switch">
+                <input 
+                  type="checkbox" 
+                  checked={notifications} 
+                  onChange={(e) => updateSetting('notifications', e.target.checked)} 
+                />
+                <span className="slider"></span>
+              </label>
+            </div>
           </div>
-          <div className="setting-control">
-            <input 
-              className="path-input" 
-              type="text" 
-              value={savePath} 
-              readOnly 
-              aria-label="Save path" 
-            />
-            <button 
-              className="btn-ghost" 
-              style={{ padding: '8px 10px' }} 
-              onClick={handleSelectFolder}
-            >
-              <Folder size={14} />
-            </button>
-          </div>
-        </div>
-        
-        <div className="setting-row">
-          <div className="setting-text">
-            <div className="setting-label">Auto-accept all incoming files</div>
-            <div className="setting-desc">Incoming files are saved automatically without a confirmation prompt.</div>
-          </div>
-          <div className="setting-control">
-            <label className="toggle-wrap" aria-label="Toggle auto-accept">
-              <div 
-                className={`toggle ${autoAccept ? 'on' : ''}`} 
-                role="switch" 
-                aria-checked={autoAccept}
-                tabIndex="0"
-                onClick={(e) => handleToggle(e, setAutoAccept, autoAccept)}
-                onKeyDown={(e) => handleToggle(e, setAutoAccept, autoAccept)}
-              ></div>
-              <span className="toggle-label">{autoAccept ? 'On' : 'Off'}</span>
-            </label>
-          </div>
-        </div>
 
-        <div className="setting-row">
-          <div className="setting-text">
-            <div className="setting-label">Show transfer notification</div>
-            <div className="setting-desc">Get a Windows notification when a file finishes transferring.</div>
+          {/* Start with OS Toggle */}
+          <div className="setting-row divider">
+            <div className="setting-info">
+              <h4>Start with Windows</h4>
+              <p>Run GrabCut silently in the background when your computer turns on</p>
+            </div>
+            <div className="switch-control">
+              <span className={`switch-state-label ${startWithWindows ? 'active' : ''}`}>{startWithWindows ? 'On' : 'Off'}</span>
+              <label className="toggle-switch">
+                <input 
+                  type="checkbox" 
+                  checked={startWithWindows} 
+                  onChange={(e) => updateSetting('startWithWindows', e.target.checked)} 
+                />
+                <span className="slider"></span>
+              </label>
+            </div>
           </div>
-          <div className="setting-control">
-            <label className="toggle-wrap" aria-label="Toggle notifications">
-              <div 
-                className={`toggle ${notifications ? 'on' : ''}`} 
-                role="switch" 
-                aria-checked={notifications}
-                tabIndex="0"
-                onClick={(e) => handleToggle(e, setNotifications, notifications)}
-                onKeyDown={(e) => handleToggle(e, setNotifications, notifications)}
-              ></div>
-              <span className="toggle-label">{notifications ? 'On' : 'Off'}</span>
-            </label>
+          
+          {/* Global Hotkey Toggle */}
+          <div className="setting-row divider">
+            <div className="setting-info">
+              <h4>Enable Global Recording Hotkey</h4>
+              <p>Use Alt+Shift+R to start/stop screen recordings from any app</p>
+            </div>
+            <div className="switch-control">
+              <span className={`switch-state-label ${enableGlobalHotkey ? 'active' : ''}`}>{enableGlobalHotkey ? 'On' : 'Off'}</span>
+              <label className="toggle-switch">
+                <input 
+                  type="checkbox" 
+                  checked={enableGlobalHotkey} 
+                  onChange={(e) => updateSetting('enableGlobalHotkey', e.target.checked)} 
+                />
+                <span className="slider"></span>
+              </label>
+            </div>
           </div>
         </div>
 
-        <div className="setting-row">
-          <div className="setting-text">
-            <div className="setting-label">Start with Windows</div>
-            <div className="setting-desc">Run GrabCut silently in the background when you turn on your PC.</div>
+        {/* 5. Data & Privacy */}
+        <div className="settings-card">
+          <div className="card-header-row">
+            <span className="section-tag" style={{ color: '#f87171' }}>
+              <Trash2 style={{ width: '13px', height: '13px', color: '#f87171' }} />
+              Data & Privacy
+            </span>
           </div>
-          <div className="setting-control">
-            <label className="toggle-wrap" aria-label="Toggle startup">
-              <div 
-                className={`toggle ${startWithWindows ? 'on' : ''}`} 
-                role="switch" 
-                aria-checked={startWithWindows}
-                tabIndex="0"
-                onClick={(e) => handleToggle(e, setStartWithWindows, startWithWindows)}
-                onKeyDown={(e) => handleToggle(e, setStartWithWindows, startWithWindows)}
-              ></div>
-              <span className="toggle-label">{startWithWindows ? 'On' : 'Off'}</span>
-            </label>
-          </div>
-        </div>
-      </div>
-
-      <div className="settings-group mt-6">
-        <div className="settings-group-header text-red-400 border-red-500/20">Data & Privacy</div>
-        <div className="setting-row">
-          <div className="setting-text">
-            <div className="setting-label text-red-300">Clear transfer history</div>
-            <div className="setting-desc">Permanently remove all records of sent and received files from this machine.</div>
-          </div>
-          <div className="setting-control">
-            {showClearConfirm ? (
-              <div className="flex gap-2">
-                <button 
-                  className="px-3 py-1.5 rounded-md text-[12px] bg-white/5 hover:bg-white/10 text-white/70 transition-colors"
-                  onClick={() => setShowClearConfirm(false)}
-                >
-                  Cancel
+          <div className="setting-row">
+            <div className="setting-info">
+              <h4>Clear Transfer History</h4>
+              <p>Permanently remove all local transfer logs and cache from this machine</p>
+            </div>
+            <div className="setting-control">
+              {showClearConfirm ? (
+                <div className="flex gap-2">
+                  <button className="btn btn-secondary" onClick={() => setShowClearConfirm(false)}>Cancel</button>
+                  <button className="btn btn-danger" onClick={handleClearHistory}>Confirm Clear</button>
+                </div>
+              ) : (
+                <button className="btn btn-danger" onClick={() => setShowClearConfirm(true)}>
+                  <Trash2 style={{ width: '14px', height: '14px' }} />
+                  Clear History
                 </button>
-                <button 
-                  className="px-3 py-1.5 rounded-md text-[12px] bg-red-500 hover:bg-red-600 text-white font-medium transition-colors"
-                  onClick={handleClearHistory}
-                >
-                  Confirm Clear
-                </button>
-              </div>
-            ) : (
-              <button 
-                className="px-3 py-1.5 rounded-md text-[12px] border border-red-500/30 text-red-400 hover:bg-red-500/10 transition-colors flex items-center gap-2"
-                onClick={() => setShowClearConfirm(true)}
-              >
-                <Trash2 size={14} /> Clear History
-              </button>
-            )}
+              )}
+            </div>
           </div>
         </div>
       </div>

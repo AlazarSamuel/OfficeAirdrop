@@ -3,22 +3,29 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Manual Installation Modal</title>
+  <title>GrabCut - Screen Recorder</title>
+  <!-- Google Fonts: Inter -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <!-- Lucide Icons -->
   <script src="https://unpkg.com/lucide@latest"></script>
 
   <style>
     :root {
-      --bg: #070810;
-      --card-bg: rgba(22, 23, 44, 0.88);
+      --bg-dark: #1e2139;
+      --sidebar-bg: #17192d;
+      --card-bg: rgba(22, 23, 44, 0.75);
       --card-border: rgba(255, 255, 255, 0.08);
+      --input-bg: rgba(0, 0, 0, 0.35);
       --accent: #6366f1;
       --accent-hover: #4f46e5;
-      --accent-glow: rgba(99, 102, 241, 0.35);
+      --accent-gradient: linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
+      --record-red: #ef4444;
+      --record-glow: rgba(239, 68, 68, 0.4);
       --text-main: #f8fafc;
       --text-muted: #94a3b8;
+      --text-dim: #64748b;
     }
 
     * {
@@ -28,221 +35,541 @@
       font-family: 'Inter', sans-serif;
     }
 
-    body {
-      background: var(--bg);
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: var(--bg-dark);
       color: var(--text-main);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      min-height: 100vh;
-      padding: 20px;
     }
 
-    /* Modal Backdrop Glow */
     .ambient-glow {
       position: absolute;
-      width: 450px;
-      height: 450px;
-      background: radial-gradient(circle, rgba(99, 102, 241, 0.14) 0%, rgba(168, 85, 247, 0.05) 50%, transparent 70%);
+      width: clamp(320px, 45vw, 650px);
+      height: clamp(320px, 45vw, 650px);
+      background: radial-gradient(circle, rgba(99, 102, 241, 0.16) 0%, rgba(168, 85, 247, 0.04) 50%, transparent 70%);
+      top: 15%;
+      right: 15%;
       pointer-events: none;
       z-index: 0;
     }
 
-    /* Modal Container */
-    .modal-card {
+    .app-window {
       position: relative;
       z-index: 1;
-      width: 100%;
-      max-width: 480px;
-      background: var(--card-bg);
-      backdrop-filter: blur(24px);
-      -webkit-backdrop-filter: blur(24px);
-      border: 1px solid var(--card-border);
-      border-radius: 20px;
-      padding: 24px;
-      box-shadow: 0 24px 50px -10px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 255, 255, 0.04);
+      width: 100vw;
+      height: 100vh;
+      background: var(--bg-dark);
       display: flex;
       flex-direction: column;
-      gap: 20px;
       overflow: hidden;
     }
 
-    /* Top Accent Gradient Line */
-    .modal-accent-bar {
-      position: absolute;
-      top: 0;
-      left: 0;
-      right: 0;
-      height: 3px;
-      background: linear-gradient(90deg, #6366f1, #a855f7, #ec4899);
-    }
-
-    /* Modal Header */
-    .modal-header {
+    /* Title Bar */
+    .title-bar {
       display: flex;
-      align-items: flex-start;
-      gap: 14px;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0 16px;
+      height: 44px;
+      background: var(--sidebar-bg);
+      border-bottom: 1px solid var(--card-border);
+      flex-shrink: 0;
+      user-select: none;
     }
 
-    .icon-badge {
-      width: 44px;
-      height: 44px;
-      border-radius: 12px;
-      background: rgba(99, 102, 241, 0.15);
-      border: 1px solid rgba(99, 102, 241, 0.3);
-      color: #a5b4fc;
+    .app-branding {
       display: flex;
       align-items: center;
-      justify-content: center;
-      flex-shrink: 0;
-    }
-
-    .header-text h2 {
-      font-size: 1.15rem;
-      font-weight: 700;
-      color: #ffffff;
-      letter-spacing: -0.01em;
-    }
-
-    .header-text p {
-      font-size: 0.82rem;
-      color: var(--text-muted);
-      margin-top: 3px;
-      line-height: 1.4;
-    }
-
-    /* Step List Box */
-    .steps-container {
-      display: flex;
-      flex-direction: column;
       gap: 10px;
-      background: rgba(255, 255, 255, 0.02);
-      border: 1px solid rgba(255, 255, 255, 0.05);
-      border-radius: 14px;
-      padding: 14px 16px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: #cbd5e1;
     }
 
-    .step-row {
-      display: flex;
-      align-items: flex-start;
-      gap: 12px;
-    }
-
-    .step-number {
+    .logo-icon {
       width: 22px;
       height: 22px;
-      border-radius: 50%;
-      background: rgba(99, 102, 241, 0.2);
-      border: 1px solid rgba(99, 102, 241, 0.4);
-      color: #c4b5fd;
-      font-size: 0.72rem;
-      font-weight: 700;
+      background: var(--accent-gradient);
+      border-radius: 6px;
       display: flex;
       align-items: center;
       justify-content: center;
-      flex-shrink: 0;
-      margin-top: 1px;
+      color: white;
     }
 
-    .step-content {
-      font-size: 0.83rem;
-      color: #cbd5e1;
-      line-height: 1.45;
+    .trial-badge {
+      font-size: 0.65rem;
+      font-weight: 700;
+      background: linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(239, 68, 68, 0.15));
+      border: 1px solid rgba(245, 158, 11, 0.35);
+      padding: 2px 7px;
+      border-radius: 6px;
+      color: #fbbf24;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .window-controls {
+      display: flex;
+      gap: 14px;
+      color: var(--text-muted);
+    }
+
+    .window-controls svg {
+      width: 14px;
+      height: 14px;
+      cursor: pointer;
+      transition: color 0.2s;
+    }
+
+    .window-controls svg:hover {
+      color: #fff;
+    }
+
+    .app-body {
+      display: flex;
+      flex: 1;
+      height: calc(100vh - 44px);
+      overflow: hidden;
+    }
+
+    /* Sidebar */
+    .sidebar {
+      position: relative;
+      width: clamp(190px, 20vw, 240px);
+      background: var(--sidebar-bg);
+      border-right: 1px solid var(--card-border);
+      padding: 20px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      flex-shrink: 0;
+    }
+
+    .nav-indicator {
+      position: absolute;
+      left: 12px;
+      right: 12px;
+      height: 42px;
+      background: rgba(99, 102, 241, 0.16);
+      border: 1px solid rgba(99, 102, 241, 0.35);
+      box-shadow: 0 0 16px rgba(99, 102, 241, 0.25), inset 0 0 12px rgba(99, 102, 241, 0.1);
+      border-radius: 10px;
+      pointer-events: none;
+      z-index: 1;
+      transform: translateY(0);
+      transition: transform 0.38s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+
+    .nav-item {
+      position: relative;
+      z-index: 2;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 14px;
+      height: 42px;
+      border-radius: 10px;
+      color: var(--text-muted);
+      text-decoration: none;
+      font-size: clamp(0.82rem, 0.9vw, 0.9rem);
+      font-weight: 500;
+      transition: color 0.25s ease, transform 0.18s cubic-bezier(0.2, 0.8, 0.2, 1);
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .nav-item i {
+      transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), color 0.25s ease;
+      flex-shrink: 0;
+    }
+
+    .nav-item:hover {
+      color: #e2e8f0;
+    }
+
+    .nav-item:hover i {
+      transform: scale(1.1);
+      color: #a5b4fc;
+    }
+
+    .nav-item.active {
+      color: #ffffff;
+      font-weight: 600;
+    }
+
+    .nav-item.active i {
+      color: #818cf8;
+      transform: scale(1.12);
+    }
+
+    /* Content Area */
+    .content-area {
+      flex: 1;
+      padding: clamp(16px, 2.8vw, 28px) clamp(16px, 3.5vw, 40px);
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      overflow-y: auto;
+      overflow-x: hidden;
+    }
+
+    .content-area::-webkit-scrollbar {
+      width: 6px;
+    }
+    .content-area::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 4px;
+    }
+
+    .page-container {
+      max-width: 1080px;
+      width: 100%;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
       flex: 1;
     }
 
-    .step-content strong {
-      color: #ffffff;
+    /* Page Header */
+    .page-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
     }
 
-    /* URL Copy Field Component */
-    .url-copy-box {
+    .page-title {
+      font-size: clamp(1.3rem, 1.8vw, 1.55rem);
+      font-weight: 800;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      letter-spacing: -0.02em;
+    }
+
+    .subtitle {
+      color: var(--text-muted);
+      font-size: clamp(0.76rem, 0.9vw, 0.84rem);
+    }
+
+    .btn-refresh {
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--card-border);
+      color: var(--text-muted);
+      padding: 7px 12px;
+      border-radius: 8px;
+      font-size: 0.78rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s;
+    }
+
+    .btn-refresh:hover {
+      background: rgba(255, 255, 255, 0.08);
+      color: #fff;
+    }
+
+    /* Source Selector Tabs */
+    .source-tabs {
+      display: flex;
+      gap: 8px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+      padding-bottom: 8px;
+    }
+
+    .tab-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      font-size: 0.84rem;
+      font-weight: 600;
+      padding: 6px 14px;
+      border-radius: 8px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s;
+    }
+
+    .tab-btn.active {
+      background: rgba(99, 102, 241, 0.15);
+      color: #818cf8;
+      border: 1px solid rgba(99, 102, 241, 0.3);
+    }
+
+    /* Window / Target Cards Grid */
+    .source-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: 12px;
+    }
+
+    .source-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      overflow: hidden;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .source-card:hover {
+      border-color: rgba(99, 102, 241, 0.4);
+      transform: translateY(-2px);
+    }
+
+    .source-card.selected {
+      border-color: #6366f1;
+      box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.3), 0 8px 20px rgba(0, 0, 0, 0.4);
+    }
+
+    /* Custom Region Tile */
+    .custom-region-card {
+      background: rgba(99, 102, 241, 0.06);
+      border: 1.5px dashed rgba(99, 102, 241, 0.35);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 120px;
+      gap: 8px;
+      text-align: center;
+      padding: 12px;
+    }
+
+    .custom-region-card:hover {
+      background: rgba(99, 102, 241, 0.12);
+      border-color: #818cf8;
+    }
+
+    .thumb-preview {
+      width: 100%;
+      height: 90px;
+      background: #090a14;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .thumb-preview img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      opacity: 0.85;
+    }
+
+    .source-title-row {
+      padding: 8px 10px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(0, 0, 0, 0.2);
+    }
+
+    .source-name {
+      font-size: 0.74rem;
+      font-weight: 600;
+      color: #cbd5e1;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* Configuration Bar */
+    .config-ribbon {
+      background: var(--card-bg);
+      backdrop-filter: blur(16px);
+      border: 1px solid var(--card-border);
+      border-radius: 14px;
+      padding: 12px 18px;
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: 8px;
-      background: rgba(0, 0, 0, 0.4);
-      border: 1px solid var(--card-border);
-      border-radius: 8px;
-      padding: 6px 8px 6px 12px;
-      margin-top: 6px;
-      margin-bottom: 2px;
+      gap: 16px;
+      flex-wrap: wrap;
     }
 
-    .url-text {
-      font-family: 'JetBrains Mono', monospace;
+    .config-group {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .config-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
       font-size: 0.78rem;
-      color: #a5b4fc;
-      user-select: all;
-    }
-
-    .copy-btn {
-      background: rgba(255, 255, 255, 0.06);
-      border: 1px solid var(--card-border);
-      color: #cbd5e1;
-      padding: 4px 10px;
-      border-radius: 6px;
-      font-size: 0.72rem;
-      font-weight: 500;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      gap: 5px;
-      transition: all 0.2s ease;
-    }
-
-    .copy-btn:hover {
-      background: rgba(255, 255, 255, 0.12);
-      color: #fff;
-    }
-
-    /* Modal Footer Buttons */
-    .modal-footer {
-      display: flex;
-      justify-content: flex-end;
-      align-items: center;
-      gap: 10px;
-      padding-top: 4px;
-    }
-
-    .btn {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      gap: 8px;
-      padding: 10px 18px;
-      border-radius: 10px;
-      font-size: 0.84rem;
-      font-weight: 600;
-      cursor: pointer;
-      transition: all 0.2s ease;
-      border: none;
-    }
-
-    .btn-secondary {
-      background: rgba(255, 255, 255, 0.05);
-      border: 1px solid var(--card-border);
       color: var(--text-muted);
     }
 
-    .btn-secondary:hover {
-      background: rgba(255, 255, 255, 0.09);
+    .config-item strong {
+      color: #f1f5f9;
+    }
+
+    .select-mini {
+      background: rgba(0, 0, 0, 0.35);
+      border: 1px solid var(--card-border);
+      color: #cbd5e1;
+      padding: 5px 10px;
+      border-radius: 6px;
+      font-size: 0.76rem;
+      outline: none;
+      cursor: pointer;
+    }
+
+    .select-mini option {
+      background: #121324;
       color: #fff;
     }
 
-    .btn-primary {
-      background: var(--accent);
-      color: #ffffff;
-      box-shadow: 0 4px 14px var(--accent-glow);
+    /* Switch Component */
+    .toggle-switch {
+      position: relative;
+      display: inline-block;
+      width: 36px;
+      height: 20px;
     }
 
-    .btn-primary:hover {
-      background: var(--accent-hover);
+    .toggle-switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .slider {
+      position: absolute;
+      cursor: pointer;
+      inset: 0;
+      background-color: rgba(255, 255, 255, 0.1);
+      border: 1px solid var(--card-border);
+      transition: .25s;
+      border-radius: 34px;
+    }
+
+    .slider:before {
+      position: absolute;
+      content: "";
+      height: 12px;
+      width: 12px;
+      left: 3px;
+      bottom: 3px;
+      background-color: #cbd5e1;
+      transition: .25s;
+      border-radius: 50%;
+    }
+
+    input:checked + .slider {
+      background-color: var(--accent);
+      border-color: var(--accent);
+    }
+
+    input:checked + .slider:before {
+      transform: translateX(16px);
+      background-color: #fff;
+    }
+
+    /* Bottom Action Trigger Stage */
+    .record-stage {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid var(--card-border);
+      border-radius: 14px;
+      padding: 14px 20px;
+    }
+
+    .meta-tags {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 0.74rem;
+      color: var(--text-dim);
+    }
+
+    .meta-tags span strong {
+      color: #cbd5e1;
+    }
+
+    .btn-record {
+      background: var(--record-red);
+      color: #fff;
+      border: none;
+      padding: 10px 24px;
+      border-radius: 12px;
+      font-size: 0.9rem;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      box-shadow: 0 4px 18px var(--record-glow);
+      transition: all 0.2s ease;
+    }
+
+    .btn-record:hover {
+      background: #dc2626;
+      box-shadow: 0 6px 24px rgba(239, 68, 68, 0.55);
       transform: translateY(-1px);
     }
 
-    .btn-primary:active {
-      transform: translateY(0);
+    .record-dot {
+      width: 10px;
+      height: 10px;
+      background: #fff;
+      border-radius: 50%;
+      animation: pulseRecord 1.5s infinite;
+    }
+
+    @keyframes pulseRecord {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(0.85); }
+    }
+
+    .shortcut-tag {
+      font-size: 0.68rem;
+      background: rgba(0, 0, 0, 0.25);
+      padding: 2px 6px;
+      border-radius: 4px;
+      color: rgba(255, 255, 255, 0.85);
+      font-weight: 600;
+    }
+
+    @media (max-width: 768px) {
+      .sidebar {
+        width: 68px;
+        padding: 16px 8px;
+        align-items: center;
+      }
+      .nav-indicator {
+        left: 8px;
+        right: 8px;
+      }
+      .nav-item span {
+        display: none;
+      }
+      .nav-item {
+        justify-content: center;
+        padding: 10px;
+      }
+      .record-stage {
+        flex-direction: column;
+        gap: 12px;
+      }
     }
   </style>
 </head>
@@ -250,76 +577,243 @@
 
   <div class="ambient-glow"></div>
 
-  <!-- Manual Installation Modal -->
-  <div class="modal-card">
-    <div class="modal-accent-bar"></div>
-
-    <!-- Header -->
-    <div class="modal-header">
-      <div class="icon-badge">
-        <i data-lucide="globe" style="width: 22px; height: 22px;"></i>
+  <main class="app-window">
+    <!-- Window Bar -->
+    <header class="title-bar">
+      <div class="app-branding">
+        <div class="logo-icon">
+          <i data-lucide="zap" style="width: 14px; height: 14px;"></i>
+        </div>
+        <span>GrabCut</span>
+        <span class="trial-badge">
+          <i data-lucide="sparkles" style="width: 11px; height: 11px;"></i> PRO TRIAL
+        </span>
       </div>
-      <div class="header-text">
-        <h2>Manual Installation</h2>
-        <p>To enable direct transfers, install the companion extension using Chrome's Developer Mode.</p>
+      <div class="window-controls">
+        <i data-lucide="minus"></i>
+        <i data-lucide="square"></i>
+        <i data-lucide="x"></i>
       </div>
-    </div>
+    </header>
 
-    <!-- Steps -->
-    <div class="steps-container">
-      <!-- Step 1 -->
-      <div class="step-row">
-        <div class="step-number">1</div>
-        <div class="step-content">
-          <span>Open your browser's extensions page:</span>
-          <div class="url-copy-box">
-            <span class="url-text" id="ext-url">chrome://extensions</span>
-            <button class="copy-btn" onclick="copyUrl()">
-              <i data-lucide="copy" style="width: 12px; height: 12px;"></i>
-              <span id="copy-text">Copy</span>
+    <div class="app-body">
+      <!-- Sidebar Navigation -->
+      <nav class="sidebar" id="sidebar">
+        <div class="nav-indicator" id="navIndicator"></div>
+
+        <a class="nav-item">
+          <i data-lucide="share-2" style="width: 18px; height: 18px;"></i>
+          <span>Share</span>
+        </a>
+        <a class="nav-item">
+          <i data-lucide="arrow-left-right" style="width: 18px; height: 18px;"></i>
+          <span>Transfers</span>
+        </a>
+        <a class="nav-item">
+          <i data-lucide="download-cloud" style="width: 18px; height: 18px;"></i>
+          <span>Downloader</span>
+        </a>
+        <a class="nav-item">
+          <i data-lucide="film" style="width: 18px; height: 18px;"></i>
+          <span>Slide Maker</span>
+        </a>
+        <a class="nav-item active">
+          <i data-lucide="video" style="width: 18px; height: 18px;"></i>
+          <span>Recorder</span>
+        </a>
+        <a class="nav-item">
+          <i data-lucide="settings" style="width: 18px; height: 18px;"></i>
+          <span>Settings</span>
+        </a>
+      </nav>
+
+      <!-- Main Content -->
+      <section class="content-area">
+        <div class="page-container">
+          <!-- Header -->
+          <div class="page-header">
+            <div>
+              <h1 class="page-title">
+                <i data-lucide="screen-share" style="width: 24px; height: 24px; color: #818cf8;"></i>
+                Screen Recorder
+              </h1>
+              <p class="subtitle">Capture native desktop screens, windows, or custom regions directly to MP4</p>
+            </div>
+            <button class="btn-refresh" title="Refresh Windows">
+              <i data-lucide="refresh-cw" style="width: 14px; height: 14px;"></i>
+              Refresh
+            </button>
+          </div>
+
+          <!-- Source Selection Tabs -->
+          <div class="source-tabs">
+            <button class="tab-btn active">
+              <i data-lucide="monitor" style="width: 15px; height: 15px;"></i>
+              Screens & Windows (6)
+            </button>
+            <button class="tab-btn">
+              <i data-lucide="camera" style="width: 15px; height: 15px;"></i>
+              Webcam Overlay
+            </button>
+            <button class="tab-btn">
+              <i data-lucide="mic" style="width: 15px; height: 15px;"></i>
+              Audio Only
+            </button>
+          </div>
+
+          <!-- Target Preview Grid -->
+          <div class="source-grid">
+            <!-- Custom Region -->
+            <div class="source-card custom-region-card">
+              <i data-lucide="crop" style="width: 26px; height: 26px; color: #818cf8;"></i>
+              <span style="font-size: 0.82rem; font-weight: 700; color: #f1f5f9;">Custom Region</span>
+              <span style="font-size: 0.68rem; color: var(--text-dim);">Drag to select area</span>
+            </div>
+
+            <!-- Entire Screen -->
+            <div class="source-card selected">
+              <div class="thumb-preview">
+                <i data-lucide="monitor" style="width: 32px; height: 32px; color: #64748b;"></i>
+              </div>
+              <div class="source-title-row">
+                <i data-lucide="display" style="width: 13px; height: 13px; color: #818cf8;"></i>
+                <span class="source-name">Entire Screen (1920x1080)</span>
+              </div>
+            </div>
+
+            <!-- Window 1 -->
+            <div class="source-card">
+              <div class="thumb-preview">
+                <i data-lucide="code-2" style="width: 30px; height: 30px; color: #64748b;"></i>
+              </div>
+              <div class="source-title-row">
+                <i data-lucide="app-window" style="width: 13px; height: 13px; color: #38bdf8;"></i>
+                <span class="source-name">VS Code — GrabCut.tsx</span>
+              </div>
+            </div>
+
+            <!-- Window 2 -->
+            <div class="source-card">
+              <div class="thumb-preview">
+                <i data-lucide="chrome" style="width: 30px; height: 30px; color: #64748b;"></i>
+              </div>
+              <div class="source-title-row">
+                <i data-lucide="globe" style="width: 13px; height: 13px; color: #fbbf24;"></i>
+                <span class="source-name">Google Chrome — Dashboard</span>
+              </div>
+            </div>
+
+            <!-- Window 3 -->
+            <div class="source-card">
+              <div class="thumb-preview">
+                <i data-lucide="zap" style="width: 30px; height: 30px; color: #64748b;"></i>
+              </div>
+              <div class="source-title-row">
+                <i data-lucide="layers" style="width: 13px; height: 13px; color: #c084fc;"></i>
+                <span class="source-name">GrabCut Hub</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Configuration Ribbon -->
+          <div class="config-ribbon">
+            <div class="config-group">
+              <div class="config-item">
+                <i data-lucide="volume-2" style="width: 15px; height: 15px; color: #818cf8;"></i>
+                <span>System Audio</span>
+                <label class="toggle-switch">
+                  <input type="checkbox" checked>
+                  <span class="slider"></span>
+                </label>
+              </div>
+
+              <div class="config-item">
+                <i data-lucide="mic" style="width: 15px; height: 15px; color: #34d399;"></i>
+                <span>Microphone:</span>
+                <select class="select-mini">
+                  <option>Default Microphone (Realtek Audio)</option>
+                  <option>USB Studio Condenser Mic</option>
+                  <option>None (Muted)</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="config-group">
+              <div class="config-item">
+                <span>FPS:</span>
+                <select class="select-mini">
+                  <option>60 FPS</option>
+                  <option>30 FPS</option>
+                  <option>120 FPS (Pro)</option>
+                </select>
+              </div>
+              <div class="config-item">
+                <span>Format:</span>
+                <select class="select-mini">
+                  <option>MP4 (H.264)</option>
+                  <option>MKV (Lossless)</option>
+                  <option>GIF</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <!-- Bottom Record Stage -->
+          <div class="record-stage">
+            <div class="meta-tags">
+              <span>Resolution: <strong>Native 1080p</strong></span>
+              <span>•</span>
+              <span>Bitrate: <strong>16 Mbps High</strong></span>
+              <span>•</span>
+              <span>Audio: <strong>Stereo 48kHz</strong></span>
+            </div>
+
+            <button class="btn-record">
+              <span class="record-dot"></span>
+              <span>Start Recording</span>
+              <span class="shortcut-tag">Alt + Shift + R</span>
             </button>
           </div>
         </div>
-      </div>
-
-      <!-- Step 2 -->
-      <div class="step-row">
-        <div class="step-number">2</div>
-        <div class="step-content">
-          Toggle <strong>Developer mode</strong> ON in the top-right corner.
-        </div>
-      </div>
-
-      <!-- Step 3 -->
-      <div class="step-row">
-        <div class="step-number">3</div>
-        <div class="step-content">
-          Click <strong>Load unpacked</strong> and choose the extension folder below.
-        </div>
-      </div>
+      </section>
     </div>
-
-    <!-- Footer Actions -->
-    <div class="modal-footer">
-      <button class="btn btn-secondary">Close</button>
-      <button class="btn btn-primary">
-        <i data-lucide="folder-open" style="width: 16px; height: 16px;"></i>
-        Open Extension Folder
-      </button>
-    </div>
-  </div>
+  </main>
 
   <script>
     lucide.createIcons();
 
-    function copyUrl() {
-      const url = document.getElementById('ext-url').innerText;
-      navigator.clipboard.writeText(url).then(() => {
-        const copyText = document.getElementById('copy-text');
-        copyText.innerText = 'Copied!';
-        setTimeout(() => { copyText.innerText = 'Copy'; }, 2000);
-      });
+    // Gliding Indicator Animation Logic
+    const navItems = document.querySelectorAll('.nav-item');
+    const indicator = document.getElementById('navIndicator');
+
+    function positionIndicator(target) {
+      if (!target) return;
+      indicator.style.transform = `translateY(${target.offsetTop - 20}px)`;
     }
+
+    const activeItem = document.querySelector('.nav-item.active');
+    if (activeItem) positionIndicator(activeItem);
+
+    navItems.forEach(item => {
+      item.addEventListener('click', () => {
+        navItems.forEach(el => el.classList.remove('active'));
+        item.classList.add('active');
+        positionIndicator(item);
+      });
+    });
+
+    window.addEventListener('resize', () => {
+      const currentActive = document.querySelector('.nav-item.active');
+      if (currentActive) positionIndicator(currentActive);
+    });
+
+    // Source Card Selection
+    document.querySelectorAll('.source-card').forEach(card => {
+      card.addEventListener('click', () => {
+        document.querySelectorAll('.source-card').forEach(c => c.classList.remove('selected'));
+        card.classList.add('selected');
+      });
+    });
   </script>
 </body>
 </html>

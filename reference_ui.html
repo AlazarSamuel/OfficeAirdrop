@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GrabCut - Top Floating Recording Bar</title>
+  <!-- Google Fonts: Inter & JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@600;700&display=swap" rel="stylesheet">
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <style>
+    :root {
+      --bg-dark: #1e2139;
+      --sidebar-bg: #17192d;
+      --card-bg: rgba(22, 23, 44, 0.75);
+      --card-border: rgba(255, 255, 255, 0.08);
+      --accent: #6366f1;
+      --accent-hover: #4f46e5;
+      --accent-gradient: linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
+      --record-red: #ef4444;
+      --record-red-glow: rgba(239, 68, 68, 0.4);
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --text-dim: #64748b;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'Inter', sans-serif;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: var(--bg-dark);
+      color: var(--text-main);
+    }
+
+    /* Ambient Background Glow */
+    .ambient-glow {
+      position: absolute;
+      width: clamp(340px, 50vw, 700px);
+      height: clamp(340px, 50vw, 700px);
+      background: radial-gradient(circle, rgba(99, 102, 241, 0.14) 0%, rgba(168, 85, 247, 0.04) 50%, transparent 70%);
+      top: 20%;
+      right: 15%;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* Fluid Window Shell */
+    .app-window {
+      position: relative;
+      z-index: 1;
+      width: 100vw;
+      height: 100vh;
+      background: var(--bg-dark);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* Title Bar */
+    .title-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0 16px;
+      height: 44px;
+      background: var(--sidebar-bg);
+      border-bottom: 1px solid var(--card-border);
+      flex-shrink: 0;
+      user-select: none;
+    }
+
+    .app-branding {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: #cbd5e1;
+    }
+
+    .logo-icon {
+      width: 22px;
+      height: 22px;
+      background: var(--accent-gradient);
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+    }
+
+    .trial-badge {
+      font-size: 0.65rem;
+      font-weight: 700;
+      background: linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(239, 68, 68, 0.15));
+      border: 1px solid rgba(245, 158, 11, 0.35);
+      padding: 2px 7px;
+      border-radius: 6px;
+      color: #fbbf24;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .window-controls {
+      display: flex;
+      gap: 14px;
+      color: var(--text-muted);
+    }
+
+    .window-controls svg {
+      width: 14px;
+      height: 14px;
+      cursor: pointer;
+      transition: color 0.2s;
+    }
+
+    .window-controls svg:hover {
+      color: #fff;
+    }
+
+    .app-body {
+      display: flex;
+      flex: 1;
+      height: calc(100vh - 44px);
+      overflow: hidden;
+    }
+
+    /* Gliding Sidebar */
+    .sidebar {
+      position: relative;
+      width: clamp(190px, 20vw, 240px);
+      background: var(--sidebar-bg);
+      border-right: 1px solid var(--card-border);
+      padding: 20px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      flex-shrink: 0;
+    }
+
+    .nav-indicator {
+      position: absolute;
+      left: 12px;
+      right: 12px;
+      height: 42px;
+      background: rgba(99, 102, 241, 0.16);
+      border: 1px solid rgba(99, 102, 241, 0.35);
+      box-shadow: 0 0 16px rgba(99, 102, 241, 0.25), inset 0 0 12px rgba(99, 102, 241, 0.1);
+      border-radius: 10px;
+      pointer-events: none;
+      z-index: 1;
+      transform: translateY(0);
+      transition: transform 0.38s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+
+    .nav-item {
+      position: relative;
+      z-index: 2;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 14px;
+      height: 42px;
+      border-radius: 10px;
+      color: var(--text-muted);
+      text-decoration: none;
+      font-size: clamp(0.82rem, 0.9vw, 0.9rem);
+      font-weight: 500;
+      transition: color 0.25s ease, transform 0.18s cubic-bezier(0.2, 0.8, 0.2, 1);
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .nav-item i {
+      transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), color 0.25s ease;
+      flex-shrink: 0;
+    }
+
+    .nav-item:hover {
+      color: #e2e8f0;
+    }
+
+    .nav-item:hover i {
+      transform: scale(1.1);
+      color: #a5b4fc;
+    }
+
+    .nav-item.active {
+      color: #ffffff;
+      font-weight: 600;
+    }
+
+    .nav-item.active i {
+      color: #818cf8;
+      transform: scale(1.12);
+    }
+
+    /* Content Area */
+    .content-area {
+      flex: 1;
+      padding: clamp(16px, 2.5vw, 24px) clamp(16px, 3.5vw, 36px);
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      overflow-y: auto;
+      overflow-x: hidden;
+    }
+
+    .content-area::-webkit-scrollbar {
+      width: 6px;
+    }
+    .content-area::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 4px;
+    }
+
+    .page-container {
+      max-width: 1080px;
+      width: 100%;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+      flex: 1;
+    }
+
+    /* ================= REFINED TOP FLOATING RECORDING BAR ================= */
+    .top-recording-bar {
+      width: 100%;
+      background: rgba(18, 19, 38, 0.88);
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+      border: 1px solid rgba(239, 68, 68, 0.3);
+      border-radius: 18px;
+      padding: 10px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      box-shadow: 0 12px 35px -8px rgba(0, 0, 0, 0.6), 0 0 20px rgba(239, 68, 68, 0.12);
+      animation: slideDown 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+
+    @keyframes slideDown {
+      from { opacity: 0; transform: translateY(-10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Left: Recording Status & Timer */
+    .bar-section-left {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .rec-live-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(239, 68, 68, 0.12);
+      border: 1px solid rgba(239, 68, 68, 0.3);
+      padding: 5px 12px;
+      border-radius: 999px;
+      color: #fca5a5;
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+
+    .live-dot {
+      width: 7px;
+      height: 7px;
+      background: var(--record-red);
+      border-radius: 50%;
+      box-shadow: 0 0 8px var(--record-red);
+      animation: blink 1.2s infinite;
+    }
+
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+
+    .timer-digits {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 1.45rem;
+      font-weight: 700;
+      color: #ffffff;
+      letter-spacing: -0.02em;
+    }
+
+    /* Middle: Real-time Stats Pill */
+    .bar-section-mid {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: rgba(255, 255, 255, 0.035);
+      border: 1px solid var(--card-border);
+      padding: 6px 14px;
+      border-radius: 12px;
+      font-size: 0.76rem;
+      color: var(--text-muted);
+    }
+
+    .bar-section-mid strong {
+      color: #f1f5f9;
+      font-weight: 600;
+    }
+
+    .dot-sep {
+      color: #475569;
+    }
+
+    /* Right: Action Buttons (Pause, Mic, Stop) */
+    .bar-section-right {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .btn-icon-control {
+      width: 38px;
+      height: 38px;
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--card-border);
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .btn-icon-control:hover {
+      background: rgba(255, 255, 255, 0.1);
+      color: #fff;
+    }
+
+    .btn-icon-control.active {
+      background: rgba(99, 102, 241, 0.2);
+      border-color: #6366f1;
+      color: #a5b4fc;
+    }
+
+    .btn-stop-bar {
+      background: var(--record-red);
+      color: #ffffff;
+      border: none;
+      padding: 8px 18px;
+      border-radius: 10px;
+      font-size: 0.85rem;
+      font-weight: 700;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      box-shadow: 0 4px 14px var(--record-red-glow);
+      transition: all 0.2s ease;
+      white-space: nowrap;
+    }
+
+    .btn-stop-bar:hover {
+      background: #dc2626;
+      box-shadow: 0 6px 20px rgba(239, 68, 68, 0.55);
+      transform: translateY(-1px);
+    }
+
+    .stop-square {
+      width: 10px;
+      height: 10px;
+      background: #fff;
+      border-radius: 2px;
+    }
+
+    /* Background Items / Target Previews in Background */
+    .workspace-preview-dimmed {
+      opacity: 0.35;
+      filter: blur(1.5px);
+      pointer-events: none;
+      user-select: none;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      flex: 1;
+    }
+
+    .dummy-feed-item {
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid var(--card-border);
+      border-radius: 10px;
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    @media (max-width: 900px) {
+      .top-recording-bar {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 12px;
+      }
+      .bar-section-left, .bar-section-mid, .bar-section-right {
+        justify-content: space-between;
+      }
+    }
+
+    @media (max-width: 768px) {
+      .sidebar {
+        width: 68px;
+        padding: 16px 8px;
+        align-items: center;
+      }
+      .nav-indicator {
+        left: 8px;
+        right: 8px;
+      }
+      .nav-item span {
+        display: none;
+      }
+      .nav-item {
+        justify-content: center;
+        padding: 10px;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="ambient-glow"></div>
+
+  <main class="app-window">
+    <!-- Title Bar -->
+    <header class="title-bar">
+      <div class="app-branding">
+        <div class="logo-icon">
+          <i data-lucide="zap" style="width: 14px; height: 14px;"></i>
+        </div>
+        <span>GrabCut</span>
+        <span class="trial-badge">
+          <i data-lucide="sparkles" style="width: 11px; height: 11px;"></i> PRO TRIAL
+        </span>
+      </div>
+      <div class="window-controls">
+        <i data-lucide="minus"></i>
+        <i data-lucide="square"></i>
+        <i data-lucide="x"></i>
+      </div>
+    </header>
+
+    <div class="app-body">
+      <!-- Sidebar Navigation -->
+      <nav class="sidebar" id="sidebar">
+        <div class="nav-indicator" id="navIndicator"></div>
+
+        <a class="nav-item">
+          <i data-lucide="share-2" style="width: 18px; height: 18px;"></i>
+          <span>Share</span>
+        </a>
+        <a class="nav-item">
+          <i data-lucide="arrow-left-right" style="width: 18px; height: 18px;"></i>
+          <span>Transfers</span>
+        </a>
+        <a class="nav-item">
+          <i data-lucide="download-cloud" style="width: 18px; height: 18px;"></i>
+          <span>Downloader</span>
+        </a>
+        <a class="nav-item">
+          <i data-lucide="film" style="width: 18px; height: 18px;"></i>
+          <span>Slide Maker</span>
+        </a>
+        <a class="nav-item active">
+          <i data-lucide="video" style="width: 18px; height: 18px;"></i>
+          <span>Recorder</span>
+        </a>
+        <a class="nav-item">
+          <i data-lucide="settings" style="width: 18px; height: 18px;"></i>
+          <span>Settings</span>
+        </a>
+      </nav>
+
+      <!-- Main Content Stage -->
+      <section class="content-area">
+        <div class="page-container">
+          <!-- Top Docked Recording Bar -->
+          <div class="top-recording-bar">
+            <!-- Left: Status & Monospace Timer -->
+            <div class="bar-section-left">
+              <span class="rec-live-tag">
+                <span class="live-dot"></span>
+                <span>Recording Live</span>
+              </span>
+              <span class="timer-digits" id="timer">00:23</span>
+            </div>
+
+            <!-- Middle: Live Metadata -->
+            <div class="bar-section-mid">
+              <span>Size: <strong id="size">~ 4.2 MB</strong></span>
+              <span class="dot-sep">•</span>
+              <span>Target: <strong>Active Window</strong></span>
+              <span class="dot-sep">•</span>
+              <span>Audio: <strong>System + Mic</strong></span>
+            </div>
+
+            <!-- Right: Controls -->
+            <div class="bar-section-right">
+              <button class="btn-icon-control" id="pauseBtn" title="Pause / Resume" onclick="togglePause()">
+                <i data-lucide="pause" style="width: 16px; height: 16px;"></i>
+              </button>
+              <button class="btn-icon-control" id="micBtn" title="Toggle Mic" onclick="toggleMic()">
+                <i data-lucide="mic" style="width: 16px; height: 16px;"></i>
+              </button>
+              <button class="btn-stop-bar">
+                <span class="stop-square"></span>
+                <span>Stop Recording</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Dimmed Background Workspace -->
+          <div class="workspace-preview-dimmed">
+            <div class="dummy-feed-item">
+              <span style="font-size: 0.8rem; color: #94a3b8;">GrabCut_Snipping_Tool_2026-08-28T17-16-22.mp4</span>
+              <span style="font-size: 0.75rem; color: #64748b;">MP4 • 2 MB • 6:56 PM</span>
+            </div>
+            <div class="dummy-feed-item">
+              <span style="font-size: 0.8rem; color: #94a3b8;">GrabCut_Snipping_Tool_2026-08-28T17-15-02.mp4</span>
+              <span style="font-size: 0.75rem; color: #64748b;">MP4 • 3 MB • 6:55 PM</span>
+            </div>
+            <div class="dummy-feed-item">
+              <span style="font-size: 0.8rem; color: #94a3b8;">GrabCut_Snipping_Tool_2026-08-28T17-14-33.mp4</span>
+              <span style="font-size: 0.75rem; color: #64748b;">MP4 • 3 MB • 6:54 PM</span>
+            </div>
+            <div class="dummy-feed-item">
+              <span style="font-size: 0.8rem; color: #94a3b8;">GrabCut_1_Facebook_2026-08-28T17-13-17.mp4</span>
+              <span style="font-size: 0.75rem; color: #64748b;">MP4 • 2 MB • 6:53 PM</span>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <script>
+    lucide.createIcons();
+
+    // Gliding Indicator Animation Logic
+    const navItems = document.querySelectorAll('.nav-item');
+    const indicator = document.getElementById('navIndicator');
+
+    function positionIndicator(target) {
+      if (!target) return;
+      indicator.style.transform = `translateY(${target.offsetTop - 20}px)`;
+    }
+
+    const activeItem = document.querySelector('.nav-item.active');
+    if (activeItem) positionIndicator(activeItem);
+
+    navItems.forEach(item => {
+      item.addEventListener('click', () => {
+        navItems.forEach(el => el.classList.remove('active'));
+        item.classList.add('active');
+        positionIndicator(item);
+      });
+    });
+
+    window.addEventListener('resize', () => {
+      const currentActive = document.querySelector('.nav-item.active');
+      if (currentActive) positionIndicator(currentActive);
+    });
+
+    // Recording Timer Logic
+    let seconds = 23;
+    let isPaused = false;
+    const timer = document.getElementById('timer');
+    const size = document.getElementById('size');
+
+    setInterval(() => {
+      if (!isPaused) {
+        seconds++;
+        const mins = String(Math.floor(seconds / 60)).padStart(2, '0');
+        const secs = String(seconds % 60).padStart(2, '0');
+        timer.textContent = `${mins}:${secs}`;
+        size.textContent = `~ ${(seconds * 0.18).toFixed(1)} MB`;
+      }
+    }, 1000);
+
+    function togglePause() {
+      isPaused = !isPaused;
+      const btn = document.getElementById('pauseBtn');
+      btn.classList.toggle('active', isPaused);
+      btn.innerHTML = isPaused
+        ? '<i data-lucide="play" style="width: 16px; height: 16px; color: #34d399;"></i>'
+        : '<i data-lucide="pause" style="width: 16px; height: 16px;"></i>';
+      lucide.createIcons();
+    }
+
+    let micMuted = false;
+    function toggleMic() {
+      micMuted = !micMuted;
+      const btn = document.getElementById('micBtn');
+      btn.innerHTML = micMuted
+        ? '<i data-lucide="mic-off" style="width: 16px; height: 16px; color: #ef4444;"></i>'
+        : '<i data-lucide="mic" style="width: 16px; height: 16px;"></i>';
+      lucide.createIcons();
+    }
+  </script>
+</body>
+</html>

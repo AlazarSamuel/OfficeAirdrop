@@ -1,0 +1,890 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GrabCut - Video Downloader</title>
+  <!-- Google Fonts: Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <style>
+    :root {
+      --bg-dark: #1e2139;
+      --sidebar-bg: #17192d;
+      --card-bg: rgba(22, 23, 44, 0.75);
+      --card-border: rgba(255, 255, 255, 0.08);
+      --input-bg: rgba(0, 0, 0, 0.35);
+      --accent: #6366f1;
+      --accent-hover: #4f46e5;
+      --accent-gradient: linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --text-dim: #64748b;
+      --live-red: #ef4444;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'Inter', sans-serif;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: var(--bg-dark);
+      color: var(--text-main);
+    }
+
+    /* Ambient Background Glow */
+    .ambient-glow {
+      position: absolute;
+      width: clamp(320px, 45vw, 650px);
+      height: clamp(320px, 45vw, 650px);
+      background: radial-gradient(circle, rgba(99, 102, 241, 0.16) 0%, rgba(168, 85, 247, 0.04) 50%, transparent 70%);
+      top: 15%;
+      right: 15%;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* Window Shell: 100% Fluid & Responsive */
+    .app-window {
+      position: relative;
+      z-index: 1;
+      width: 100vw;
+      height: 100vh;
+      background: var(--bg-dark);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* Title Bar */
+    .title-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0 16px;
+      height: 44px;
+      background: var(--sidebar-bg);
+      border-bottom: 1px solid var(--card-border);
+      flex-shrink: 0;
+      user-select: none;
+    }
+
+    .app-branding {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: #cbd5e1;
+    }
+
+    .logo-icon {
+      width: 22px;
+      height: 22px;
+      background: var(--accent-gradient);
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+    }
+
+    .plan-badge {
+      font-size: 0.65rem;
+      font-weight: 700;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid var(--card-border);
+      padding: 2px 7px;
+      border-radius: 6px;
+      color: #94a3b8;
+    }
+
+    .window-controls {
+      display: flex;
+      gap: 14px;
+      color: var(--text-muted);
+    }
+
+    .window-controls svg {
+      width: 14px;
+      height: 14px;
+      cursor: pointer;
+      transition: color 0.2s;
+    }
+
+    .window-controls svg:hover {
+      color: #fff;
+    }
+
+    /* App Layout */
+    .app-body {
+      display: flex;
+      flex: 1;
+      height: calc(100vh - 44px);
+      overflow: hidden;
+    }
+
+    /* Smooth Sliding Glider Sidebar */
+    .sidebar {
+      position: relative;
+      width: clamp(190px, 20vw, 240px);
+      background: var(--sidebar-bg);
+      border-right: 1px solid var(--card-border);
+      padding: 20px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      flex-shrink: 0;
+    }
+
+    .nav-indicator {
+      position: absolute;
+      left: 12px;
+      right: 12px;
+      height: 42px;
+      background: rgba(99, 102, 241, 0.16);
+      border: 1px solid rgba(99, 102, 241, 0.35);
+      box-shadow: 0 0 16px rgba(99, 102, 241, 0.25), inset 0 0 12px rgba(99, 102, 241, 0.1);
+      border-radius: 10px;
+      pointer-events: none;
+      z-index: 1;
+      transform: translateY(0);
+      transition: transform 0.38s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+
+    .nav-item {
+      position: relative;
+      z-index: 2;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 14px;
+      height: 42px;
+      border-radius: 10px;
+      color: var(--text-muted);
+      text-decoration: none;
+      font-size: clamp(0.82rem, 0.9vw, 0.9rem);
+      font-weight: 500;
+      transition: color 0.25s ease, transform 0.18s cubic-bezier(0.2, 0.8, 0.2, 1);
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .nav-item i {
+      transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), color 0.25s ease;
+      flex-shrink: 0;
+    }
+
+    .nav-item:hover {
+      color: #e2e8f0;
+    }
+
+    .nav-item:hover i {
+      transform: scale(1.1);
+      color: #a5b4fc;
+    }
+
+    .nav-item:active {
+      transform: scale(0.97);
+    }
+
+    .nav-item.active {
+      color: #ffffff;
+      font-weight: 600;
+    }
+
+    .nav-item.active i {
+      color: #818cf8;
+      transform: scale(1.12);
+    }
+
+    /* Content Area */
+    .content-area {
+      flex: 1;
+      padding: clamp(20px, 3.5vw, 36px) clamp(18px, 4vw, 48px);
+      display: flex;
+      flex-direction: column;
+      gap: clamp(16px, 2.5vw, 24px);
+      overflow-y: auto;
+      overflow-x: hidden;
+    }
+
+    .content-area::-webkit-scrollbar {
+      width: 6px;
+    }
+    .content-area::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 4px;
+    }
+
+    .page-container {
+      max-width: 900px;
+      width: 100%;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      flex: 1;
+    }
+
+    /* Header */
+    .page-header {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .page-title {
+      font-size: clamp(1.4rem, 2vw, 1.7rem);
+      font-weight: 800;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      letter-spacing: -0.02em;
+    }
+
+    .subtitle {
+      color: var(--text-muted);
+      font-size: clamp(0.78rem, 1vw, 0.86rem);
+    }
+
+    /* Platforms Ribbon */
+    .platforms-ribbon {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .platforms-label {
+      font-size: 0.76rem;
+      font-weight: 600;
+      color: var(--text-dim);
+    }
+
+    .platforms-list {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .platform-tag {
+      font-size: 0.74rem;
+      font-weight: 500;
+      color: #cbd5e1;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--card-border);
+      padding: 5px 12px;
+      border-radius: 20px;
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      transition: all 0.2s ease;
+      cursor: default;
+    }
+
+    .platform-tag:hover {
+      background: rgba(255, 255, 255, 0.06);
+      border-color: rgba(255, 255, 255, 0.15);
+      transform: translateY(-1px);
+    }
+
+    .brand-svg {
+      width: 15px;
+      height: 15px;
+      display: block;
+      flex-shrink: 0;
+    }
+
+    /* Video Mode Toggle */
+    .mode-switch {
+      display: inline-flex;
+      background: rgba(0, 0, 0, 0.35);
+      border: 1px solid var(--card-border);
+      border-radius: 10px;
+      padding: 4px;
+      gap: 4px;
+      width: fit-content;
+    }
+
+    .mode-btn {
+      padding: 6px 14px;
+      border-radius: 7px;
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      font-size: 0.8rem;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .mode-btn.active {
+      background: rgba(255, 255, 255, 0.12);
+      color: #fff;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .live-dot {
+      width: 6px;
+      height: 6px;
+      background: var(--live-red);
+      border-radius: 50%;
+      box-shadow: 0 0 6px var(--live-red);
+    }
+
+    /* All-in-One Download Input Bar */
+    .download-bar {
+      background: var(--card-bg);
+      backdrop-filter: blur(16px);
+      border: 1px solid var(--card-border);
+      border-radius: 16px;
+      padding: 8px 10px 8px 16px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    .download-bar:focus-within {
+      border-color: rgba(99, 102, 241, 0.5);
+      box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+    }
+
+    .link-icon {
+      color: var(--text-dim);
+      flex-shrink: 0;
+    }
+
+    .url-input {
+      flex: 1;
+      background: transparent;
+      border: none;
+      outline: none;
+      color: #fff;
+      font-size: clamp(0.82rem, 0.95vw, 0.9rem);
+      min-width: 140px;
+    }
+
+    .url-input::placeholder {
+      color: #64748b;
+    }
+
+    .bar-controls {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .quality-select {
+      background: rgba(0, 0, 0, 0.3);
+      border: 1px solid var(--card-border);
+      color: #cbd5e1;
+      padding: 8px 12px;
+      border-radius: 8px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      outline: none;
+      cursor: pointer;
+    }
+
+    .quality-select option {
+      background: #121324;
+      color: #fff;
+    }
+
+    .btn-paste {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--card-border);
+      color: #cbd5e1;
+      padding: 8px 14px;
+      border-radius: 8px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s;
+    }
+
+    .btn-paste:hover {
+      background: rgba(255, 255, 255, 0.1);
+      color: #fff;
+    }
+
+    .btn-download {
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      padding: 9px 18px;
+      border-radius: 10px;
+      font-size: 0.85rem;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      transition: all 0.2s ease;
+      box-shadow: 0 4px 12px rgba(99, 102, 241, 0.35);
+      white-space: nowrap;
+    }
+
+    .btn-download:hover {
+      background: var(--accent-hover);
+      box-shadow: 0 6px 18px rgba(99, 102, 241, 0.45);
+      transform: translateY(-1px);
+    }
+
+    /* Dynamic Stages: Initial Empty State vs. Interactive Fetching State */
+    .stage-wrapper {
+      flex: 1;
+      position: relative;
+      display: flex;
+      min-height: 220px;
+    }
+
+    .empty-state, .fetching-stage {
+      flex: 1;
+      border: 1px dashed var(--card-border);
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.015);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: clamp(20px, 3vw, 36px) 20px;
+      gap: 14px;
+      transition: all 0.3s ease;
+    }
+
+    .empty-icon-box {
+      width: 50px;
+      height: 50px;
+      border-radius: 50%;
+      background: rgba(99, 102, 241, 0.1);
+      border: 1px solid rgba(99, 102, 241, 0.25);
+      color: #818cf8;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .empty-title {
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: #f1f5f9;
+    }
+
+    .empty-desc {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      max-width: 320px;
+      line-height: 1.4;
+    }
+
+    /* ================= SMOOTH FETCHING / LOADER SCREEN ================= */
+    .fetching-stage {
+      display: none; /* Shown dynamically during fetching */
+      border-style: solid;
+      background: var(--card-bg);
+      backdrop-filter: blur(16px);
+      box-shadow: 0 12px 35px rgba(0, 0, 0, 0.3);
+      position: relative;
+      overflow: hidden;
+      animation: stageFadeIn 0.3s ease-out;
+    }
+
+    @keyframes stageFadeIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Circular Spinning Aura */
+    .loader-ring-wrap {
+      position: relative;
+      width: 60px;
+      height: 60px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .loader-ring {
+      position: absolute;
+      inset: 0;
+      border-radius: 50%;
+      border: 3px solid rgba(99, 102, 241, 0.15);
+      border-top-color: #818cf8;
+      border-right-color: #c084fc;
+      animation: ringSpin 0.9s cubic-bezier(0.6, 0.2, 0.4, 0.8) infinite;
+    }
+
+    @keyframes ringSpin {
+      100% { transform: rotate(360deg); }
+    }
+
+    .loader-center-icon {
+      position: relative;
+      z-index: 2;
+      color: #a5b4fc;
+      animation: pulseIcon 1.8s ease-in-out infinite;
+    }
+
+    @keyframes pulseIcon {
+      0%, 100% { transform: scale(0.95); opacity: 0.75; }
+      50% { transform: scale(1.1); opacity: 1; }
+    }
+
+    .fetching-text-group {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      max-width: 380px;
+    }
+
+    .fetching-title {
+      font-size: 1rem;
+      font-weight: 700;
+      color: #fff;
+    }
+
+    .fetching-sub {
+      font-size: 0.78rem;
+      color: var(--text-muted);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    /* Skeleton Loading Placeholder */
+    .skeleton-strip {
+      width: min(280px, 80%);
+      height: 6px;
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 999px;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .skeleton-shimmer {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 45%;
+      height: 100%;
+      background: linear-gradient(90deg, transparent, rgba(99, 102, 241, 0.6), transparent);
+      border-radius: 999px;
+      animation: shimmer 1.3s infinite ease-in-out;
+    }
+
+    @keyframes shimmer {
+      0% { transform: translateX(-100%); }
+      100% { transform: translateX(250%); }
+    }
+
+    @media (max-width: 768px) {
+      .sidebar {
+        width: 68px;
+        padding: 16px 8px;
+        align-items: center;
+      }
+      .nav-indicator {
+        left: 8px;
+        right: 8px;
+      }
+      .nav-item span {
+        display: none;
+      }
+      .nav-item {
+        justify-content: center;
+        padding: 10px;
+      }
+      .download-bar {
+        flex-wrap: wrap;
+        padding: 12px;
+      }
+      .url-input {
+        width: 100%;
+        margin-bottom: 8px;
+      }
+      .bar-controls {
+        width: 100%;
+        justify-content: space-between;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="ambient-glow"></div>
+
+  <main class="app-window">
+    <!-- Window Bar -->
+    <header class="title-bar">
+      <div class="app-branding">
+        <div class="logo-icon">
+          <i data-lucide="zap" style="width: 14px; height: 14px;"></i>
+        </div>
+        <span>GrabCut</span>
+        <span class="plan-badge">FREE</span>
+      </div>
+      <div class="window-controls">
+        <i data-lucide="minus"></i>
+        <i data-lucide="square"></i>
+        <i data-lucide="x"></i>
+      </div>
+    </header>
+
+    <div class="app-body">
+      <!-- Sidebar with Animated Gliding Highlight -->
+      <nav class="sidebar" id="sidebar">
+        <div class="nav-indicator" id="navIndicator"></div>
+
+        <a class="nav-item">
+          <i data-lucide="share-2" style="width: 18px; height: 18px;"></i>
+          <span>Share</span>
+        </a>
+        <a class="nav-item">
+          <i data-lucide="clock" style="width: 18px; height: 18px;"></i>
+          <span>History</span>
+        </a>
+        <a class="nav-item active">
+          <i data-lucide="download-cloud" style="width: 18px; height: 18px;"></i>
+          <span>Downloader</span>
+        </a>
+        <a class="nav-item">
+          <i data-lucide="film" style="width: 18px; height: 18px;"></i>
+          <span>Slide Maker</span>
+        </a>
+        <a class="nav-item">
+          <i data-lucide="settings" style="width: 18px; height: 18px;"></i>
+          <span>Settings</span>
+        </a>
+      </nav>
+
+      <!-- Main Downloader Canvas -->
+      <section class="content-area">
+        <div class="page-container">
+          <!-- Page Header -->
+          <div class="page-header">
+            <h1 class="page-title">
+              <i data-lucide="video" style="width: 24px; height: 24px; color: #818cf8;"></i>
+              Video Downloader
+            </h1>
+            <p class="subtitle">Download high-quality videos & audio directly to your local library</p>
+          </div>
+
+          <!-- Platforms Ribbon with Brand SVGs -->
+          <div class="platforms-ribbon">
+            <span class="platforms-label">Supported Platforms:</span>
+            <div class="platforms-list">
+              <!-- YouTube -->
+              <div class="platform-tag">
+                <svg class="brand-svg" viewBox="0 0 24 24" fill="none">
+                  <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814z" fill="#FF0000"/>
+                  <path d="M9.545 15.568V8.432L15.818 12l-6.273 3.568z" fill="#ffffff"/>
+                </svg>
+                <span>YouTube</span>
+              </div>
+
+              <!-- Instagram -->
+              <div class="platform-tag">
+                <svg class="brand-svg" viewBox="0 0 24 24" fill="none">
+                  <defs>
+                    <radialGradient id="ig-grad" cx="20%" cy="105%" r="115%">
+                      <stop offset="0%" stop-color="#fdf497"/>
+                      <stop offset="15%" stop-color="#fdf497"/>
+                      <stop offset="45%" stop-color="#fd5949"/>
+                      <stop offset="60%" stop-color="#d6249f"/>
+                      <stop offset="90%" stop-color="#285AEB"/>
+                    </radialGradient>
+                  </defs>
+                  <rect x="2" y="2" width="20" height="20" rx="5.5" fill="url(#ig-grad)"/>
+                  <rect x="5.5" y="5.5" width="13" height="13" rx="3.5" stroke="#ffffff" stroke-width="1.6" fill="none"/>
+                  <circle cx="12" cy="12" r="3.2" stroke="#ffffff" stroke-width="1.6" fill="none"/>
+                  <circle cx="16.3" cy="7.7" r="0.8" fill="#ffffff"/>
+                </svg>
+                <span>Instagram</span>
+              </div>
+
+              <!-- TikTok -->
+              <div class="platform-tag">
+                <svg class="brand-svg" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M12.525.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.05-2.89-.35-4.2-.97-.57-.26-1.1-.59-1.62-.93-.01 2.92.01 5.84-.02 8.75-.08 1.4-.54 2.79-1.35 3.94-1.31 1.92-3.58 3.17-5.91 3.21-1.43.08-2.86-.31-4.08-1.03-2.02-1.19-3.44-3.37-3.65-5.71-.02-.5-.03-1-.01-1.49.18-1.9 1.12-3.72 2.58-4.96 1.66-1.44 3.98-2.13 6.15-1.72.02 1.48-.04 2.96-.04 4.44-.99-.32-2.15-.23-3.02.37-.63.41-1.11 1.04-1.36 1.75-.21.51-.24 1.07-.14 1.61.24 1.64 1.82 3.02 3.5 2.87 1.12-.01 2.19-.66 2.77-1.61.19-.33.4-.67.41-1.06.1-1.79.06-3.57.07-5.36.01-4.03-.01-8.05.02-12.07z" fill="#00f2fe"/>
+                  <path d="M12.525.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.05-2.89-.35-4.2-.97-.57-.26-1.1-.59-1.62-.93-.01 2.92.01 5.84-.02 8.75-.08 1.4-.54 2.79-1.35 3.94-1.31 1.92-3.58 3.17-5.91 3.21-1.43.08-2.86-.31-4.08-1.03-2.02-1.19-3.44-3.37-3.65-5.71-.02-.5-.03-1-.01-1.49.18-1.9 1.12-3.72 2.58-4.96 1.66-1.44 3.98-2.13 6.15-1.72.02 1.48-.04 2.96-.04 4.44-.99-.32-2.15-.23-3.02.37-.63.41-1.11 1.04-1.36 1.75-.21.51-.24 1.07-.14 1.61.24 1.64 1.82 3.02 3.5 2.87 1.12-.01 2.19-.66 2.77-1.61.19-.33.4-.67.41-1.06.1-1.79.06-3.57.07-5.36.01-4.03-.01-8.05.02-12.07z" fill="#fe2c55" style="mix-blend-mode: screen;"/>
+                </svg>
+                <span>TikTok</span>
+              </div>
+
+              <!-- X / Twitter -->
+              <div class="platform-tag">
+                <svg class="brand-svg" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" fill="#f8fafc"/>
+                </svg>
+                <span>X / Twitter</span>
+              </div>
+
+              <!-- Facebook -->
+              <div class="platform-tag">
+                <svg class="brand-svg" viewBox="0 0 24 24" fill="none">
+                  <circle cx="12" cy="12" r="11" fill="#1877F2"/>
+                  <path d="M13.5 22V13.8h2.8l.4-3.2h-3.2V8.6c0-.9.3-1.6 1.6-1.6h1.7V4.2c-.3 0-1.4-.1-2.6-.1-2.6 0-4.4 1.6-4.4 4.5v2H7v3.2h2.8V22h3.7z" fill="#ffffff"/>
+                </svg>
+                <span>Facebook</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Mode Toggle -->
+          <div class="mode-switch">
+            <button class="mode-btn active">
+              <i data-lucide="clapperboard" style="width: 14px; height: 14px; color: #818cf8;"></i>
+              Standard Video
+            </button>
+            <button class="mode-btn">
+              <span class="live-dot"></span>
+              Live Broadcast
+            </button>
+          </div>
+
+          <!-- All-in-One Download Input Bar -->
+          <div class="download-bar">
+            <i data-lucide="link" class="link-icon" style="width: 18px; height: 18px;"></i>
+            <input 
+              type="text" 
+              class="url-input" 
+              id="urlInput"
+              placeholder="Paste YouTube, TikTok, X, or IG video link..." 
+              spellcheck="false"
+            />
+            <div class="bar-controls">
+              <select class="quality-select">
+                <option value="1080p">1080p HD</option>
+                <option value="4k">4K Ultra HD (Pro)</option>
+                <option value="720p">720p</option>
+                <option value="mp3">Audio Only (MP3)</option>
+              </select>
+              <button class="btn-paste" onclick="triggerFetchFlow('https://www.youtube.com/watch?v=dQw4w9WgXcQ')">
+                <i data-lucide="clipboard" style="width: 14px; height: 14px;"></i>
+                Paste
+              </button>
+              <button class="btn-download" onclick="startFetching()">
+                <i data-lucide="download" style="width: 15px; height: 15px;"></i>
+                Download
+              </button>
+            </div>
+          </div>
+
+          <!-- Stage Wrapper (Empty State & Active Loading Screen) -->
+          <div class="stage-wrapper">
+            <!-- Initial Empty State -->
+            <div class="empty-state" id="emptyState">
+              <div class="empty-icon-box">
+                <i data-lucide="arrow-down-to-line" style="width: 22px; height: 22px;"></i>
+              </div>
+              <div class="empty-title">Ready for downloads</div>
+              <p class="empty-desc">Paste any video URL above to extract high-bitrate media directly to your drive.</p>
+            </div>
+
+            <!-- Interactive Fetching / Loading Screen -->
+            <div class="fetching-stage" id="fetchingStage">
+              <div class="loader-ring-wrap">
+                <div class="loader-ring"></div>
+                <div class="loader-center-icon">
+                  <i data-lucide="sparkles" style="width: 20px; height: 20px;"></i>
+                </div>
+              </div>
+
+              <div class="fetching-text-group">
+                <div class="fetching-title">Fetching video metadata...</div>
+                <div class="fetching-sub" id="fetchingUrlDisplay">Analyzing stream formats and resolutions</div>
+              </div>
+
+              <!-- Animated Shimmer Bar -->
+              <div class="skeleton-strip">
+                <div class="skeleton-shimmer"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <script>
+    lucide.createIcons();
+
+    // Gliding Indicator Animation Logic
+    const navItems = document.querySelectorAll('.nav-item');
+    const indicator = document.getElementById('navIndicator');
+
+    function positionIndicator(target) {
+      if (!target) return;
+      indicator.style.transform = `translateY(${target.offsetTop - 20}px)`;
+    }
+
+    const activeItem = document.querySelector('.nav-item.active');
+    if (activeItem) positionIndicator(activeItem);
+
+    navItems.forEach(item => {
+      item.addEventListener('click', () => {
+        navItems.forEach(el => el.classList.remove('active'));
+        item.classList.add('active');
+        positionIndicator(item);
+      });
+    });
+
+    window.addEventListener('resize', () => {
+      const currentActive = document.querySelector('.nav-item.active');
+      if (currentActive) positionIndicator(currentActive);
+    });
+
+    // Paste & Fetch Loading Animation Flow
+    function triggerFetchFlow(sampleUrl) {
+      const input = document.getElementById('urlInput');
+      input.value = sampleUrl;
+      startFetching();
+    }
+
+    function startFetching() {
+      const input = document.getElementById('urlInput');
+      const emptyState = document.getElementById('emptyState');
+      const fetchingStage = document.getElementById('fetchingStage');
+      const urlDisplay = document.getElementById('fetchingUrlDisplay');
+
+      const urlText = input.value.trim() || 'https://youtube.com/watch?v=sample_video';
+      urlDisplay.textContent = `Resolving stream for: ${urlText}`;
+
+      // Switch to loading state
+      emptyState.style.display = 'none';
+      fetchingStage.style.display = 'flex';
+
+      // Re-create icons for newly displayed elements
+      lucide.createIcons();
+
+      // Reset back to ready after simulated fetch (2.8s)
+      setTimeout(() => {
+        fetchingStage.style.display = 'none';
+        emptyState.style.display = 'flex';
+      }, 2800);
+    }
+  </script>
+</body>
+</html>

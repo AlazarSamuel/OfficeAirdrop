@@ -2,7 +2,6 @@ import { spawn } from 'child_process'
 import path from 'path'
 import fs from 'fs'
 import { app } from 'electron'
-import * as licensing from './licensing.js'
 
 const ffmpegPath = app.isPackaged
   ? path.join(process.resourcesPath, 'bin', 'ffmpeg.exe')
@@ -74,7 +73,7 @@ function createSlideshow(images, duration, outputDir, transition, onProgress, on
         let actualTransition = transition || 'fade'
         
         // --- Gate 1: Cryptographic Feature Binding ---
-        const proToken = licensing.getProToken();
+        const proToken = true;
         if (!proToken && actualTransition !== 'fade') {
           console.log('[SlideMaker] Cryptographic binding failed (Missing Token). Forcing basic fade.');
           actualTransition = 'fade';

@@ -1,10 +1,8 @@
 const { contextBridge, ipcRenderer } = require('electron')
 
 contextBridge.exposeInMainWorld('electronAPI', Object.freeze({
-  // Licensing
-  getLicenseStatus: () => ipcRenderer.invoke('get-license-status'),
-  activateLicense: (key) => ipcRenderer.invoke('activate-license', key),
-  deactivateLicense: () => ipcRenderer.invoke('deactivate-license'),
+  readClipboard: () => ipcRenderer.invoke('read-clipboard'),
+
   // Peers
   onDiscoveredPeers: (callback) => {
     const handler = (e, peers) => callback(peers)
@@ -15,6 +13,15 @@ contextBridge.exposeInMainWorld('electronAPI', Object.freeze({
   getPeers: () => ipcRenderer.invoke('get-peers'),
   getLocalIp: () => ipcRenderer.invoke('get-local-ip'),
   getPort: () => ipcRenderer.invoke('get-port'),
+
+  // Context Menu
+  installContextMenu: () => ipcRenderer.invoke('install-context-menu'),
+  removeContextMenu: () => ipcRenderer.invoke('remove-context-menu'),
+  onContextMenuFile: (callback) => {
+    const handler = (e, filePath) => callback(filePath)
+    ipcRenderer.on('context-menu-file', handler)
+    return () => ipcRenderer.removeListener('context-menu-file', handler)
+  },
 
   // File operations
   sendFiles: (peerId, files) => ipcRenderer.send('send-files', peerId, files),
@@ -100,10 +107,7 @@ contextBridge.exposeInMainWorld('electronAPI', Object.freeze({
     ipcRenderer.on('download-complete', handler)
     return () => ipcRenderer.removeListener('download-complete', handler)
   },
-  onDownloadError: (callback) => {
-    ipcRenderer.on('download-error', (event, data) => callback(data))
-    return () => ipcRenderer.removeAllListeners('download-error')
-  },
+
   onAppUpdated: (callback) => {
     ipcRenderer.on('app-updated', (event, data) => callback(data))
     return () => ipcRenderer.removeAllListeners('app-updated')
@@ -123,6 +127,54 @@ contextBridge.exposeInMainWorld('electronAPI', Object.freeze({
     ipcRenderer.on('slideshow-error', (event, data) => callback(data))
     return () => ipcRenderer.removeAllListeners('slideshow-error')
   },
+
+  // Screen Recorder
+  getCaptureSources: () => ipcRenderer.invoke('get-capture-sources'),
+  checkDiskSpace: () => ipcRenderer.invoke('check-disk-space'),
+  startRecordingStream: (uuid) => ipcRenderer.invoke('start-recording-stream', uuid),
+  saveRecordingChunk: (uuid, buffer) => ipcRenderer.invoke('save-recording-chunk', uuid, buffer),
+  finishRecordingStream: (uuid) => ipcRenderer.invoke('finish-recording-stream', uuid),
+  cancelRecordingStream: (uuid) => ipcRenderer.invoke('cancel-recording-stream', uuid),
+  encodeRecording: (opts) => ipcRenderer.invoke('encode-recording', opts),
+  cancelEncode: () => ipcRenderer.invoke('cancel-encode'),
+  deleteOrphanedRecording: (path) => ipcRenderer.invoke('delete-orphaned-recording', path),
+  startRegionSelection: () => ipcRenderer.invoke('start-region-selection'),
+  showRecordingBorder: (bounds) => ipcRenderer.send('show-recording-border', bounds),
+  hideRecordingBorder: () => ipcRenderer.send('hide-recording-border'),
+  minimizeWindow: () => ipcRenderer.send('window-minimize'),
+  maximizeWindow: () => ipcRenderer.send('window-maximize'),
+  closeWindow: () => ipcRenderer.send('window-close'),
+  getRecordingHistory: () => ipcRenderer.invoke('get-recording-history'),
+  openPath: (p) => ipcRenderer.send('open-path', p),
+  updateRecordingTimer: (timeStr) => ipcRenderer.send('update-recording-timer', timeStr),
+  sendCountdownTick: (tick) => ipcRenderer.send('update-overlay-countdown', tick),
+  onEncodeProgress: (callback) => {
+    const handler = (e, data) => callback(data)
+    ipcRenderer.on('encode-progress', handler)
+    return () => ipcRenderer.removeListener('encode-progress', handler)
+  },
+  onFloatingPause: (callback) => {
+    const handler = () => callback()
+    ipcRenderer.on('floating-pause', handler)
+    return () => ipcRenderer.removeListener('floating-pause', handler)
+  },
+  onFloatingStop: (callback) => {
+    const handler = () => callback()
+    ipcRenderer.on('floating-stop', handler)
+    return () => ipcRenderer.removeListener('floating-stop', handler)
+  },
+  onToggleRecording: (callback) => {
+    const handler = (e) => callback()
+    ipcRenderer.on('toggle-recording', handler)
+    return () => ipcRenderer.removeListener('toggle-recording', handler)
+  },
+  onOrphanedRecordingsFound: (callback) => {
+    const handler = (e, files) => callback(files)
+    ipcRenderer.on('orphaned-recordings-found', handler)
+    return () => ipcRenderer.removeListener('orphaned-recordings-found', handler)
+  },
+  notifyRecordingStarted: () => ipcRenderer.send('recording-started'),
+  notifyRecordingStopped: () => ipcRenderer.send('recording-stopped'),
 
   onTransferAutoDeclined: (callback) => {
     const handler = (e, data) => callback(data)
@@ -159,4 +211,6 @@ contextBridge.exposeInMainWorld('electronAPI', Object.freeze({
   // File system
   openFile: (filePath) => ipcRenderer.invoke('open-file', filePath),
   openFolder: (filePath) => ipcRenderer.invoke('open-folder', filePath),
+  deleteFile: (filePath) => ipcRenderer.invoke('delete-file', filePath),
+  showConfirmDialog: (message, detail) => ipcRenderer.invoke('show-confirm-dialog', message, detail),
 }))

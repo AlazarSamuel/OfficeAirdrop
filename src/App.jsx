@@ -1,14 +1,14 @@
-import React, { useState, useEffect } from 'react'
-import { Share, History, Settings, Smartphone, Minus, Square, X, CheckCircle2, Download, ArrowUp, Pause, Play, Video, FileText, Clock, Film, Sparkles } from 'lucide-react'
+import React, { useState, useEffect, useRef } from 'react'
+import { Share, Settings, Minus, Square, X, CheckCircle2, Download, ArrowUp, Pause, Play, Video, FileText, Clock, Film, FileArchive, Music, Image as ImageIcon } from 'lucide-react'
 import ShareView from './views/ShareView'
-import HistoryView from './views/HistoryView'
 import SettingsView from './views/SettingsView'
 import DownloaderView from './views/DownloaderView'
 import SlideMakerView from './views/SlideMakerView'
-import { Image as ImageIcon } from 'lucide-react'
+import RecorderView from './views/RecorderView'
 
 function App() {
   const [activeTab, setActiveTab] = useState('share')
+  const [contextMenuFile, setContextMenuFile] = useState(null)
   const [myHostname, setMyHostname] = useState('My PC')
   const [queue, setQueue] = useState([])
   const [incomingTransfer, setIncomingTransfer] = useState(null)
@@ -16,33 +16,61 @@ function App() {
   const [countdown, setCountdown] = useState(30)
 
   const [unreadCount, setUnreadCount] = useState(0)
-  const [isPro, setIsPro] = useState(false)
+  const isPro = true;
+
+  const indicatorRef = useRef(null)
+
+  useEffect(() => {
+    // Re-position the gliding nav indicator
+    const activeItem = document.querySelector('.nav-item.active')
+    if (activeItem && indicatorRef.current) {
+      indicatorRef.current.style.transform = `translateY(${activeItem.offsetTop - 20}px)`
+    }
+  }, [activeTab])
 
   const formatBytes = (bytes) => {
-    if (!bytes) return '0 B'
+    if (!bytes || isNaN(bytes) || bytes <= 0) return '0 B'
     const k = 1024
     const sizes = ['B', 'KB', 'MB', 'GB', 'TB']
-    const i = Math.floor(Math.log(bytes) / Math.log(k))
+    const i = Math.min(Math.floor(Math.log(bytes) / Math.log(k)), sizes.length - 1)
+    if (i < 0) return '0 B'
     return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i]
   }
 
-  const formatETA = (seconds) => {
-    if (!seconds) return '...'
+  const formatETA = (seconds, isPaused) => {
+    if (isPaused) return 'Paused'
+    if (!seconds || isNaN(seconds) || seconds === Infinity || seconds <= 0) return '...'
     if (seconds < 60) return `${Math.floor(seconds)}s`
+    if (seconds >= 3600) {
+      const h = Math.floor(seconds / 3600)
+      const m = Math.floor((seconds % 3600) / 60)
+      return `${h}h ${m}m`
+    }
     const m = Math.floor(seconds / 60)
     const s = Math.floor(seconds % 60)
     return `${m}m ${s}s`
   }
 
+  const renderFileIcon = (fileName, size = 20) => {
+    if (!fileName) return <FileText size={size} />
+    const ext = fileName.split('.').pop().toLowerCase()
+    if (['mp4', 'mov', 'avi', 'mkv', 'webm', 'wmv'].includes(ext)) return <Video size={size} />
+    if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'ico'].includes(ext)) return <ImageIcon size={size} />
+    if (['zip', 'rar', '7z', 'tar', 'gz', 'bz2', 'iso'].includes(ext)) return <FileArchive size={size} />
+    if (['mp3', 'wav', 'flac', 'aac', 'ogg', 'm4a'].includes(ext)) return <Music size={size} />
+    return <FileText size={size} />
+  }
+
   useEffect(() => {
     let unsubs = []
     if (window.electronAPI) {
-      window.electronAPI.getSettings().then(settings => {
-        setMyHostname(settings.displayName)
-      })
-      if (window.electronAPI.getLicenseStatus) {
-        window.electronAPI.getLicenseStatus().then(status => {
-          setIsPro(status.isPro)
+      if (window.electronAPI.installContextMenu) {
+        window.electronAPI.installContextMenu()
+      }
+      
+      if (window.electronAPI.getSettings) {
+        window.electronAPI.getSettings().then(settings => {
+          setMyHostname(settings.displayName)
         })
       }
       if (window.electronAPI.onTransferRequest) {
@@ -56,7 +84,7 @@ function App() {
           setActiveTransfer(null)
           triggerToast('Transfer complete!')
           
-          if (entry && entry.direction === 'received' && activeTab !== 'history') {
+          if (entry && entry.direction === 'received') {
             setUnreadCount(c => c + 1)
           }
         }))
@@ -67,24 +95,31 @@ function App() {
           setActiveTransfer({
             status: 'waiting',
             fileName: data.fileName || 'file',
-            to: data.peerName || 'Peer'
+            to: data.peerName || 'Peer',
+            fileCount: data.fileCount || 1,
+            bytesTotal: data.bytesTotal || 0,
+            progress: 0
           })
         }))
       }
 
       if (window.electronAPI.onTransferProgress) {
         unsubs.push(window.electronAPI.onTransferProgress((data) => {
-          setActiveTransfer({
+          setActiveTransfer(prev => ({
+            ...(prev || {}),
             status: 'uploading',
-            fileName: data.fileName || 'file',
-            to: data.peerName || 'Peer',
-            speed: data.speed || 0,
-            eta: data.eta || 0,
-            bytesTransferred: data.bytesTransferred || 0,
-            bytesTotal: data.bytesTotal || 0,
-            progress: data.progress || 0,
-            direction: data.direction || 'sending'
-          })
+            fileName: data.fileName || prev?.fileName || 'file',
+            to: data.peerName || prev?.to || 'Peer',
+            speed: data.speed !== undefined ? data.speed : (prev?.speed || 0),
+            eta: data.eta !== undefined ? data.eta : (prev?.eta || 0),
+            bytesTransferred: data.bytesTransferred !== undefined ? data.bytesTransferred : (prev?.bytesTransferred || 0),
+            bytesTotal: data.bytesTotal !== undefined ? data.bytesTotal : (prev?.bytesTotal || 0),
+            progress: data.progress !== undefined ? data.progress : (prev?.progress || 0),
+            direction: data.direction || prev?.direction || 'sending',
+            fileIndex: data.fileIndex || prev?.fileIndex || 1,
+            fileCount: data.fileCount || prev?.fileCount || 1,
+            isPaused: data.isPaused !== undefined ? data.isPaused : (prev?.isPaused || false)
+          }))
         }))
       }
 
@@ -124,6 +159,15 @@ function App() {
       if (window.electronAPI.onNavigateTo) {
         unsubs.push(window.electronAPI.onNavigateTo((tab) => {
           setActiveTab(tab)
+        }))
+      }
+      
+
+
+      if (window.electronAPI.onContextMenuFile) {
+        unsubs.push(window.electronAPI.onContextMenuFile((filePath) => {
+          setContextMenuFile(filePath)
+          setActiveTab('share')
         }))
       }
     }
@@ -169,120 +213,30 @@ function App() {
   }
 
   return (
-    <div className="app-shell relative overflow-hidden">
-      {/* Title bar */}
-      <div className="title-bar">
-        <div className="flex items-center gap-[2px] flex-1 app-region-drag pl-2">
-          <img src="/icon.png" alt="Logo" className="w-[24px] h-[24px]" style={{ marginRight: '-4px', transform: 'translateY(4px)' }} />
-          <span className="title-bar-label font-medium" style={{ paddingLeft: 0, flex: 'none', marginRight: '6px' }}>GrabCut</span>
-          {isPro ? (
-            <span className="tier-badge badge-pro"><Sparkles size={12} /> Pro</span>
-          ) : (
-            <span className="tier-badge badge-free">Free</span>
-          )}
+    <main className="app-window relative overflow-hidden">
+      <div className="ambient-glow"></div>
+      
+      {/* Window Bar */}
+      <header className="title-bar app-region-drag">
+        <div className="app-branding pl-2">
+          <img src="./icon.png" alt="Logo" className="w-[18px] h-[18px] rounded-[4px] object-contain shrink-0" />
+          <span>GrabCut</span>
+          <span className="trial-badge">PRO</span>
         </div>
-      </div>
-
-      {/* Global Live transfer progress */}
-      {activeTransfer && (
-        <div className="absolute top-[60px] left-[calc(50%+110px)] -translate-x-1/2 w-full max-w-[520px] z-50 pointer-events-auto transition-all duration-300">
-          <div className="mock-transfer-card">
-            
-            <div className="mock-transfer-header">
-              <div className="mock-file-icon-box">
-                {activeTransfer.status === 'waiting' ? (
-                  <ArrowUp size={20} className="animate-pulse" />
-                ) : (
-                  <Video size={20} />
-                )}
-              </div>
-              
-              <div className="mock-file-details">
-                <div className="mock-file-name-row">
-                  <span className="mock-file-name" title={activeTransfer.fileName}>
-                    {activeTransfer.fileName}
-                  </span>
-                </div>
-                <div className="mock-target-device">
-                  {activeTransfer.status === 'cancelled' ? (
-                    <strong style={{ color: '#ef4444', fontWeight: 600 }}>Transfer Cancelled</strong>
-                  ) : (
-                    <>
-                      <span>{activeTransfer.direction === 'receiving' ? 'Receiving from' : 'Sending to'}</span>
-                      <strong style={{ color: '#cbd5e1', fontWeight: 500 }}>{activeTransfer.to}</strong>
-                    </>
-                  )}
-                </div>
-              </div>
-
-              <div className="mock-actions-group">
-                {(activeTransfer.status === 'uploading' || activeTransfer.status === 'cancelled') && (
-                  <button 
-                    className="mock-action-btn" 
-                    title={activeTransfer.isPaused ? "Resume" : "Pause"}
-                    onClick={() => {
-                      if (activeTransfer.status === 'cancelled') return;
-                      if (activeTransfer.isPaused) {
-                        window.electronAPI.resumeTransfer()
-                      } else {
-                        window.electronAPI.pauseTransfer()
-                      }
-                    }}
-                    disabled={activeTransfer.status === 'cancelled'}
-                    style={{ opacity: activeTransfer.status === 'cancelled' ? 0.5 : 1 }}
-                  >
-                    {activeTransfer.isPaused ? <Play size={15} /> : <Pause size={15} />}
-                  </button>
-                )}
-                <button 
-                  onClick={() => window.electronAPI.cancelTransfer()} 
-                  className="mock-action-btn cancel" 
-                  title="Cancel"
-                  disabled={activeTransfer.status === 'cancelled'}
-                  style={{ opacity: activeTransfer.status === 'cancelled' ? 0.5 : 1 }}
-                >
-                  <X size={15} />
-                </button>
-              </div>
-            </div>
-
-            {(activeTransfer.status === 'uploading' || activeTransfer.status === 'cancelled') && (
-              <>
-                {/* Progress Track */}
-                <div className="mock-progress-bar-track">
-                  <div 
-                    className="mock-progress-bar-fill" 
-                    style={{ 
-                      width: `${activeTransfer.progress}%`,
-                      background: activeTransfer.status === 'cancelled' ? '#ef4444' : undefined,
-                      boxShadow: activeTransfer.status === 'cancelled' ? '0 0 12px rgba(239, 68, 68, 0.6)' : undefined
-                    }}
-                  ></div>
-                </div>
-
-                {/* Transfer Stats Row */}
-                <div className="mock-transfer-meta">
-                  <div className="mock-metrics">
-                    <span><strong style={{ color: '#f1f5f9', fontWeight: 600 }}>{formatBytes(activeTransfer.bytesTransferred)}</strong> / {formatBytes(activeTransfer.bytesTotal)}</span>
-                    <span>•</span>
-                    <span>{formatBytes(activeTransfer.speed)}/s</span>
-                    <span>•</span>
-                    <span>ETA: {formatETA(activeTransfer.eta)}</span>
-                  </div>
-                  <span className="mock-percentage">{activeTransfer.progress}%</span>
-                </div>
-              </>
-            )}
-          </div>
+        <div className="window-controls app-region-no-drag flex gap-[14px]">
+          <Minus size={14} className="cursor-pointer hover:text-white" onClick={() => window.electronAPI && window.electronAPI.minimizeWindow && window.electronAPI.minimizeWindow()} />
+          <Square size={14} className="cursor-pointer hover:text-white" onClick={() => window.electronAPI && window.electronAPI.maximizeWindow && window.electronAPI.maximizeWindow()} />
+          <X size={14} className="cursor-pointer hover:text-red-500" onClick={() => window.electronAPI && window.electronAPI.closeWindow && window.electronAPI.closeWindow()} />
         </div>
-      )}
+      </header>
 
-      {/* Incoming Transfer Modal */}
+      {/* Global Floating Transfer Notifications / Modals */}
       <div 
-        className={`absolute top-[60px] left-[calc(50%+110px)] -translate-x-1/2 w-full max-w-[460px] z-50 pointer-events-auto transition-all duration-300 transform ${incomingTransfer ? 'translate-y-0 opacity-100 scale-100' : '-translate-y-4 opacity-0 scale-95 pointer-events-none'}`}
+        className="absolute top-[60px] left-[calc(50%+100px)] -translate-x-1/2 w-full max-w-[500px] z-50 pointer-events-none flex flex-col gap-3 px-4 transition-all duration-300"
       >
+        {/* Incoming Transfer Modal */}
         {incomingTransfer && (
-          <>
+          <div className="pointer-events-auto transition-all duration-300">
             <div className="mock2-ambient-glow"></div>
             <div className="mock2-incoming-card">
               
@@ -299,7 +253,7 @@ function App() {
               {/* File Info Box */}
               <div className="mock2-transfer-info-box">
                 <div className="mock2-file-icon">
-                  <Film size={22} />
+                  {renderFileIcon(incomingTransfer.fileName, 22)}
                 </div>
                 <div className="mock2-file-meta">
                   <span className="mock2-sender-title">
@@ -313,7 +267,7 @@ function App() {
                     {incomingTransfer.fileSize && (
                       <>
                         <span className="mock2-dot-divider"></span>
-                        <span>{incomingTransfer.fileSize}</span>
+                        <span>{formatBytes(incomingTransfer.fileSize)}</span>
                       </>
                     )}
                   </div>
@@ -346,28 +300,139 @@ function App() {
                 </button>
               </div>
             </div>
-          </>
+          </div>
+        )}
+
+        {/* Active Transfer Card */}
+        {activeTransfer && (
+          <div className="pointer-events-auto transition-all duration-300">
+            <div className="mock-transfer-card">
+              
+              <div className="mock-transfer-header">
+                <div className="mock-file-icon-box">
+                  {activeTransfer.status === 'waiting' ? (
+                    <ArrowUp size={20} className="animate-pulse" />
+                  ) : (
+                    renderFileIcon(activeTransfer.fileName, 20)
+                  )}
+                </div>
+                
+                <div className="mock-file-details">
+                  <div className="mock-file-name-row">
+                    <span className="mock-file-name" title={activeTransfer.fileName}>
+                      {activeTransfer.fileCount > 1 
+                        ? `(${activeTransfer.fileIndex || 1}/${activeTransfer.fileCount}) ${activeTransfer.fileName}`
+                        : activeTransfer.fileName}
+                    </span>
+                    {activeTransfer.fileCount > 1 && (
+                      <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 shrink-0 whitespace-nowrap">
+                        {activeTransfer.fileCount} files
+                      </span>
+                    )}
+                    {activeTransfer.isPaused && (
+                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 shrink-0 uppercase tracking-wide">
+                        Paused
+                      </span>
+                    )}
+                  </div>
+                  <div className="mock-target-device">
+                    {activeTransfer.status === 'cancelled' ? (
+                      <strong style={{ color: '#ef4444', fontWeight: 600 }}>Transfer Cancelled</strong>
+                    ) : activeTransfer.status === 'waiting' ? (
+                      <span className="text-indigo-300 flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-indigo-400 animate-ping"></span>
+                        Waiting for <strong>{activeTransfer.to}</strong> to accept...
+                      </span>
+                    ) : (
+                      <>
+                        <span>{activeTransfer.direction === 'receiving' ? 'Receiving from' : 'Sending to'}</span>
+                        <strong style={{ color: '#cbd5e1', fontWeight: 500 }}>{activeTransfer.to}</strong>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                <div className="mock-actions-group">
+                  {(activeTransfer.status === 'uploading' || activeTransfer.status === 'cancelled') && (
+                    <button 
+                      className="mock-action-btn" 
+                      title={activeTransfer.isPaused ? "Resume" : "Pause"}
+                      onClick={() => {
+                        if (activeTransfer.status === 'cancelled') return;
+                        if (activeTransfer.isPaused) {
+                          window.electronAPI.resumeTransfer()
+                        } else {
+                          window.electronAPI.pauseTransfer()
+                        }
+                      }}
+                      disabled={activeTransfer.status === 'cancelled'}
+                      style={{ opacity: activeTransfer.status === 'cancelled' ? 0.5 : 1 }}
+                    >
+                      {activeTransfer.isPaused ? <Play size={15} /> : <Pause size={15} />}
+                    </button>
+                  )}
+                  <button 
+                    onClick={() => window.electronAPI.cancelTransfer()} 
+                    className="mock-action-btn cancel" 
+                    title="Cancel"
+                    disabled={activeTransfer.status === 'cancelled'}
+                    style={{ opacity: activeTransfer.status === 'cancelled' ? 0.5 : 1 }}
+                  >
+                    <X size={15} />
+                  </button>
+                </div>
+              </div>
+
+              {(activeTransfer.status === 'uploading' || activeTransfer.status === 'cancelled') && (
+                <>
+                  {/* Progress Track */}
+                  <div className="mock-progress-bar-track">
+                    <div 
+                      className="mock-progress-bar-fill" 
+                      style={{ 
+                        width: `${activeTransfer.progress}%`,
+                        background: activeTransfer.status === 'cancelled' 
+                          ? '#ef4444' 
+                          : activeTransfer.isPaused 
+                            ? 'linear-gradient(90deg, #f59e0b 0%, #d97706 100%)' 
+                            : undefined,
+                        boxShadow: activeTransfer.status === 'cancelled' 
+                          ? '0 0 12px rgba(239, 68, 68, 0.6)' 
+                          : activeTransfer.isPaused 
+                            ? '0 0 12px rgba(245, 158, 11, 0.4)' 
+                            : undefined
+                      }}
+                    ></div>
+                  </div>
+
+                  {/* Transfer Stats Row */}
+                  <div className="mock-transfer-meta">
+                    <div className="mock-metrics">
+                      <span><strong style={{ color: '#f1f5f9', fontWeight: 600 }}>{formatBytes(activeTransfer.bytesTransferred)}</strong> / {formatBytes(activeTransfer.bytesTotal)}</span>
+                      <span>•</span>
+                      <span>{activeTransfer.isPaused ? '0 B/s' : `${formatBytes(activeTransfer.speed)}/s`}</span>
+                      <span>•</span>
+                      <span>ETA: {formatETA(activeTransfer.eta, activeTransfer.isPaused)}</span>
+                    </div>
+                    <span className="mock-percentage">{activeTransfer.progress}%</span>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
         )}
       </div>
 
       <div className="app-body">
         {/* Sidebar */}
         <nav className="sidebar" aria-label="Main navigation">
+          <div className="nav-indicator" ref={indicatorRef}></div>
           <button 
-            className={`nav-item ${activeTab === 'share' ? 'active' : ''}`} 
+            className={`nav-item ${activeTab === 'share' ? 'active' : ''} relative`} 
             onClick={() => setActiveTab('share')}
           >
-            <Share size={18} /> Share
-          </button>
-          <button 
-            className={`nav-item ${activeTab === 'history' ? 'active' : ''} relative`} 
-            onClick={() => {
-              setActiveTab('history')
-              setUnreadCount(0)
-            }}
-          >
-            <History size={18} /> History
-            {unreadCount > 0 && (
+            <Share size={18} /> <span>Share</span>
+            {unreadCount > 0 && activeTab !== 'share' && (
               <span className="absolute top-2 right-2 bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full flex items-center justify-center min-w-[18px]">
                 {unreadCount}
               </span>
@@ -377,45 +442,65 @@ function App() {
             className={`nav-item ${activeTab === 'downloader' ? 'active' : ''}`} 
             onClick={() => setActiveTab('downloader')}
           >
-            <Download size={18} /> Downloader
+            <Download size={18} /> <span>Downloader</span>
           </button>
           <button 
             className={`nav-item ${activeTab === 'slidemaker' ? 'active' : ''}`} 
             onClick={() => setActiveTab('slidemaker')}
           >
-            <ImageIcon size={18} /> Slide Maker
+            <Film size={18} /> <span>Slide Maker</span>
+          </button>
+          <button 
+            className={`nav-item ${activeTab === 'recorder' ? 'active' : ''}`} 
+            onClick={() => setActiveTab('recorder')}
+          >
+            <Video size={18} /> <span>Recorder</span>
           </button>
           <button 
             className={`nav-item ${activeTab === 'settings' ? 'active' : ''}`} 
             onClick={() => setActiveTab('settings')}
           >
-            <Settings size={18} /> Settings
+            <Settings size={18} /> <span>Settings</span>
           </button>
         </nav>
 
         {/* Content */}
-        <main className="content app-region-no-drag relative">
+        <section className="content-area app-region-no-drag relative">
           <div className="content-inner">
             <div style={{ display: activeTab === 'share' ? 'flex' : 'none', flex: 1, flexDirection: 'column', minHeight: 0 }}>
-              <ShareView myHostname={myHostname} triggerToast={triggerToast} />
-            </div>
-            <div style={{ display: activeTab === 'history' ? 'flex' : 'none', flex: 1, flexDirection: 'column', minHeight: 0 }}>
-              <HistoryView triggerToast={triggerToast} />
+              <ShareView 
+                myHostname={myHostname} 
+                triggerToast={triggerToast} 
+                contextMenuFile={contextMenuFile} 
+                onClearContextMenu={() => setContextMenuFile(null)}
+                unreadCount={unreadCount}
+                onClearUnread={() => setUnreadCount(0)}
+              />
             </div>
             <div style={{ display: activeTab === 'downloader' ? 'flex' : 'none', flex: 1, flexDirection: 'column', minHeight: 0 }}>
-              <DownloaderView triggerToast={triggerToast} />
+              <DownloaderView 
+                triggerToast={triggerToast} 
+                isPro={isPro} 
+              />
             </div>
             <div style={{ display: activeTab === 'slidemaker' ? 'flex' : 'none', flex: 1, flexDirection: 'column', minHeight: 0 }}>
-              <SlideMakerView triggerToast={triggerToast} />
+              <SlideMakerView 
+                triggerToast={triggerToast} 
+                isPro={isPro} 
+              />
+            </div>
+            <div style={{ display: activeTab === 'recorder' ? 'flex' : 'none', flex: 1, flexDirection: 'column', minHeight: 0 }}>
+              <RecorderView isPro={isPro} triggerToast={triggerToast} />
             </div>
             <div style={{ display: activeTab === 'settings' ? 'flex' : 'none', flex: 1, flexDirection: 'column', minHeight: 0 }}>
               <SettingsView 
                 onSettingsChanged={(s) => setMyHostname(s.displayName)} 
                 triggerToast={triggerToast} 
-                onLicenseChanged={(status) => setIsPro(status.isPro)}
               />
             </div>
           </div>
+          
+
           
           {/* Toast */}
           <div className={`toast ${queue.length > 0 ? 'show' : ''}`} role="status" aria-live="polite">
@@ -423,9 +508,9 @@ function App() {
             <span id="toast-msg">{queue[0] || ''}</span>
           </div>
 
-        </main>
+        </section>
       </div>
-    </div>
+    </main>
   )
 }
 

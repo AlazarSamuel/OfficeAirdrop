@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --record-red: #ef4444;
+    }
+    body, html {
+      margin: 0;
+      padding: 0;
+      width: 100vw;
+      height: 100vh;
+      background: transparent;
+      overflow: hidden;
+      box-sizing: border-box;
+      pointer-events: none;
+    }
+    .recording-border {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      box-sizing: border-box;
+      border: 3px dashed var(--record-red);
+      animation: marching-ants 1s linear infinite;
+      box-shadow: 0 0 10px rgba(239, 68, 68, 0.5), inset 0 0 10px rgba(239, 68, 68, 0.5);
+    }
+    @keyframes marching-ants {
+      to {
+        background-position: 100% 100%;
+      }
+    }
+
+    /* Top Dimension Tag Indicator */
+    .dimension-badge {
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      background: rgba(15, 16, 33, 0.9);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      backdrop-filter: blur(12px);
+      color: #cbd5e1;
+      padding: 3px 8px;
+      border-radius: 6px;
+      font-size: 0.68rem;
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+    }
+
+    .dimension-badge .live-dot {
+      width: 5px;
+      height: 5px;
+      background: var(--record-red);
+      border-radius: 50%;
+      animation: blink 1s infinite;
+    }
+
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.2; }
+    }
+
+    /* 8 Precision Anchor Resize Handles */
+    .handle {
+      position: absolute;
+      width: 10px;
+      height: 10px;
+      background: #ffffff;
+      border: 2px solid var(--record-red);
+      border-radius: 50%;
+      box-shadow: 0 0 8px rgba(239, 68, 68, 0.8);
+      z-index: 25;
+    }
+
+    .handle.top-left     { top: -6px; left: -6px; }
+    .handle.top-mid      { top: -6px; left: 50%; transform: translateX(-50%); }
+    .handle.top-right    { top: -6px; right: -6px; }
+    .handle.mid-left     { top: 50%; left: -6px; transform: translateY(-50%); }
+    .handle.mid-right    { top: 50%; right: -6px; transform: translateY(-50%); }
+    .handle.bottom-left  { bottom: -6px; left: -6px; }
+    .handle.bottom-mid   { bottom: -6px; left: 50%; transform: translateX(-50%); }
+    .handle.bottom-right { bottom: -6px; right: -6px; }
+
+    /* Center Framing Crosshair */
+    .crosshair {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 18px;
+      height: 18px;
+      pointer-events: none;
+      opacity: 0.35;
+      transition: opacity 0.3s ease;
+    }
+    .crosshair::before, .crosshair::after {
+      content: '';
+      position: absolute;
+      background: #ffffff;
+    }
+    .crosshair::before { top: 8px; left: 0; width: 18px; height: 2px; }
+    .crosshair::after  { top: 0; left: 8px; width: 2px; height: 18px; }
+    
+    /* Countdown Display */
+    .countdown-center {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 8rem;
+      font-weight: 800;
+      color: #ffffff;
+      text-shadow: 0 0 40px rgba(239, 68, 68, 0.8), 0 0 20px rgba(239, 68, 68, 0.6);
+      opacity: 1;
+      transition: opacity 0.3s ease, transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+      z-index: 50;
+      pointer-events: none;
+    }
+    
+    .countdown-hidden {
+      opacity: 0 !important;
+      transform: translate(-50%, -50%) scale(0.5) !important;
+    }
+  </style>
+</head>
+<body>
+  <div class="recording-border">
+    <div class="dimension-badge">
+      <span class="live-dot"></span>
+      <span id="dimensionText">0 × 0 px</span>
+    </div>
+    
+    <div class="handle top-left"></div>
+    <div class="handle top-mid"></div>
+    <div class="handle top-right"></div>
+    <div class="handle mid-left"></div>
+    <div class="handle mid-right"></div>
+    <div class="handle bottom-left"></div>
+    <div class="handle bottom-mid"></div>
+    <div class="handle bottom-right"></div>
+
+    <div class="crosshair" id="crosshair"></div>
+    <div class="countdown-center" id="countdown">3</div>
+  </div>
+  
+  <script>
+    const { ipcRenderer } = require('electron');
+    const dimensionText = document.getElementById('dimensionText');
+    const countdownElem = document.getElementById('countdown');
+    const crosshairElem = document.getElementById('crosshair');
+    
+    function updateDimensions() {
+      dimensionText.textContent = `${window.innerWidth} × ${window.innerHeight} px`;
+    }
+    window.addEventListener('resize', updateDimensions);
+    updateDimensions();
+
+    ipcRenderer.on('update-overlay-countdown', (event, tick) => {
+      if (tick === 0 || tick === null) {
+        countdownElem.classList.add('countdown-hidden');
+        crosshairElem.style.opacity = '0';
+      } else {
+        countdownElem.textContent = tick;
+        // Trigger pop animation by resetting transform
+        countdownElem.style.transform = 'translate(-50%, -50%) scale(1.2)';
+        setTimeout(() => {
+          countdownElem.style.transform = 'translate(-50%, -50%) scale(1)';
+        }, 50);
+      }
+    });
+  </script>
+</body>
+</html>

@@ -1,7 +1,11 @@
 {
   "name": "grabcut",
   "private": true,
-  "version": "0.0.1",
+  "version": "0.0.2",
+  "author": {
+    "name": "Bileh Systems"
+  },
+  "description": "GrabCut",
   "type": "module",
   "main": "dist-electron/main.js",
   "scripts": {
@@ -30,6 +34,7 @@
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.4",
     "autoprefixer": "^10.5.4",
+    "clean-css": "^5.3.3",
     "electron": "^43.4.0",
     "electron-builder": "^26.15.3",
     "javascript-obfuscator": "^5.5.0",
@@ -52,13 +57,22 @@
       "extension"
     ],
     "win": {
-      "target": "nsis",
-      "icon": "public/icon.png"
+      "target": "appx",
+      "icon": "public/icon.ico"
+    },
+    "appx": {
+      "applicationId": "GrabCut",
+      "identityName": "BilehSystems.GrabCut",
+      "publisher": "CN=5D5C9C51-3CCF-4D13-9AFF-E62D3C0288A0",
+      "publisherDisplayName": "Bileh Systems"
     },
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
-      "shortcutName": "GrabCut"
+      "shortcutName": "GrabCut",
+      "uninstallDisplayName": "GrabCut",
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico"
     }
   }
 }

@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>GrabCut Splash</title>
+  <style>
+    :root {
+      --bg-desktop: #020205;
+      --splash-bg: rgba(12, 13, 28, 0.88);
+      --card-border: rgba(255, 255, 255, 0.08);
+      --accent: #6366f1;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'Inter', sans-serif;
+      user-select: none;
+    }
+
+    body {
+      background-color: transparent; /* Changed from var(--bg-desktop) so window can be transparent */
+      height: 100vh;
+      width: 100vw;
+      overflow: hidden;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    /* 16:9 Landscape Splash Window (560px x 315px) */
+    .splash-window-16-9 {
+      position: relative;
+      width: 560px;
+      height: 315px;
+      aspect-ratio: 16 / 9;
+      background: var(--splash-bg);
+      backdrop-filter: blur(28px);
+      -webkit-backdrop-filter: blur(28px);
+      border-radius: 20px;
+      border: 1px solid var(--card-border);
+      box-shadow: 
+        0 40px 90px rgba(0, 0, 0, 0.85), 
+        0 0 0 1px rgba(255, 255, 255, 0.05),
+        inset 0 1px 0 rgba(255, 255, 255, 0.12);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center; /* Dead center alignment */
+      overflow: hidden;
+      transition: opacity 0.5s ease, transform 0.5s ease;
+    }
+
+    .splash-window-16-9.fade-out {
+      opacity: 0;
+      transform: scale(0.96);
+    }
+
+    /* Ambient Radial Glow */
+    .splash-glow {
+      position: absolute;
+      width: 450px;
+      height: 450px;
+      background: radial-gradient(circle, rgba(139, 92, 246, 0.18) 0%, rgba(99, 102, 241, 0.05) 50%, transparent 70%);
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* Brand Header */
+    .brand-container {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 18px;
+      margin-top: 0px; /* Lowered the logo container */
+    }
+
+    /* Floating Logo */
+    .logo-box {
+      position: relative;
+      width: 96px;
+      height: 96px;
+      background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
+      border-radius: 28px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      box-shadow: 0 12px 30px rgba(139, 92, 246, 0.45);
+      animation: float 3s ease-in-out infinite;
+    }
+
+    .logo-box img {
+      width: 100%;
+      height: 100%;
+      border-radius: 28px;
+      object-fit: cover;
+      display: block;
+    }
+
+    .logo-pulse {
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      border-radius: 28px;
+      background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
+      z-index: -1;
+      animation: pulse-ring 2.4s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+    }
+
+    @keyframes float {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-6px); }
+    }
+
+    @keyframes pulse-ring {
+      0% { transform: scale(0.95); opacity: 0.8; }
+      100% { transform: scale(1.5); opacity: 0; }
+    }
+
+    /* Typography */
+    .title-row {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .app-title-wrapper {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .app-title {
+      font-size: 1.8rem;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      color: #fff;
+    }
+
+    .app-version {
+      font-size: 0.7rem;
+      font-weight: 700;
+      color: rgba(255, 255, 255, 0.5);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      background: rgba(255, 255, 255, 0.06);
+      padding: 3px 8px;
+      border-radius: 999px;
+      border: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    .app-motto {
+      font-size: 0.75rem;
+      font-weight: 800;
+      letter-spacing: 0.25em; /* Wide, cinematic tracking */
+      color: rgba(255, 255, 255, 0.45);
+      text-transform: uppercase;
+      margin-left: 0.25em; /* Offset for letter-spacing alignment */
+    }
+
+    /* Footer & Loading Track (Pinned to bottom) */
+    .loading-container {
+      position: absolute;
+      bottom: 32px;
+      left: 44px;
+      right: 44px;
+      z-index: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .progress-track {
+      width: 100%;
+      height: 4px;
+      background: rgba(255, 255, 255, 0.06);
+      border-radius: 999px;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .progress-fill {
+      position: absolute;
+      top: 0; left: 0; bottom: 0;
+      width: 0%;
+      background: linear-gradient(90deg, #38bdf8, #818cf8, #c084fc);
+      border-radius: 999px;
+      box-shadow: 0 0 14px rgba(129, 140, 248, 0.6);
+      transition: width 0.35s ease-out;
+    }
+
+    .progress-fill::after {
+      content: '';
+      position: absolute;
+      top: 0; left: -100%; bottom: 0; width: 100%;
+      background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.4), transparent);
+      animation: shimmer 1.6s infinite;
+    }
+
+    @keyframes shimmer {
+      100% { left: 100%; }
+    }
+
+    .status-meta-row {
+      width: 100%;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.75rem;
+      font-weight: 500;
+      color: var(--text-muted);
+    }
+
+    .percentage-text {
+      font-weight: 600;
+      color: #cbd5e1;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- 16:9 Landscape Splash Screen -->
+  <div class="splash-window-16-9" id="splashScreen">
+    <div class="splash-glow"></div>
+
+    <!-- Branding (Perfectly Centered) -->
+    <div class="brand-container">
+      <div class="logo-box">
+        <div class="logo-pulse"></div>
+        <img src="icon.png" alt="GrabCut" />
+      </div>
+      
+      <div class="title-row">
+        <div class="app-title-wrapper">
+          <h1 class="app-title">GrabCut</h1>
+          <span class="app-version">v0.0.2</span>
+        </div>
+        <!-- NEW MOTTO ADDED HERE -->
+        <div class="app-motto">GRAB IT. CUT IT. SEND IT.</div>
+      </div>
+    </div>
+
+    <!-- Progress Tracker (Pinned to Bottom) -->
+    <div class="loading-container">
+      <div class="progress-track">
+        <div class="progress-fill" id="progressBar"></div>
+      </div>
+      
+      <div class="status-meta-row">
+        <span id="statusText">Initializing core engine...</span>
+        <span class="percentage-text" id="progressPercent">0%</span>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const progressBar = document.getElementById('progressBar');
+    const progressPercent = document.getElementById('progressPercent');
+    const statusText = document.getElementById('statusText');
+    const splashScreen = document.getElementById('splashScreen');
+
+    const loadingSteps = [
+      { progress: 18, text: 'Waking up local daemon...' },
+      { progress: 42, text: 'Checking FFmpeg binaries...' },
+      { progress: 68, text: 'Verifying license...' },
+      { progress: 90, text: 'Mounting Live Studio buffer...' },
+      { progress: 100, text: 'Ready' }
+    ];
+
+    let currentStep = 0;
+
+    function simulateLoading() {
+      if (currentStep < loadingSteps.length) {
+        const step = loadingSteps[currentStep];
+        progressBar.style.width = `${step.progress}%`;
+        progressPercent.textContent = `${step.progress}%`;
+        statusText.textContent = step.text;
+        
+        const nextDelay = Math.random() * 600 + 400;
+        currentStep++;
+        setTimeout(simulateLoading, nextDelay);
+      } else {
+        setTimeout(() => {
+          splashScreen.classList.add('fade-out');
+          setTimeout(() => {
+            window.close();
+          }, 500);
+        }, 500);
+      }
+    }
+
+    setTimeout(simulateLoading, 400);
+  </script>
+</body>
+</html>

@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Region Selector</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    
+    body, html {
+      width: 100vw;
+      height: 100vh;
+      background: transparent;
+      overflow: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      user-select: none;
+    }
+    
+    #overlay-container {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      cursor: crosshair;
+      z-index: 1;
+    }
+
+    #dark-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(15, 23, 42, 0.45);
+      backdrop-filter: blur(1px);
+    }
+
+    #selection {
+      position: absolute;
+      border: 2px solid #818cf8;
+      background: rgba(99, 102, 241, 0.08);
+      box-shadow: 0 0 0 9999px rgba(15, 23, 42, 0.55);
+      z-index: 2;
+      display: none;
+      cursor: move;
+    }
+
+    /* 8 Grab Handles */
+    .handle {
+      position: absolute;
+      width: 12px;
+      height: 12px;
+      background: #ffffff;
+      border: 2px solid #6366f1;
+      border-radius: 50%;
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+      z-index: 10;
+      display: none;
+    }
+    .handle.nw { top: -7px; left: -7px; cursor: nwse-resize; }
+    .handle.ne { top: -7px; right: -7px; cursor: nesw-resize; }
+    .handle.sw { bottom: -7px; left: -7px; cursor: nesw-resize; }
+    .handle.se { bottom: -7px; right: -7px; cursor: nwse-resize; }
+    .handle.n  { top: -7px; left: calc(50% - 6px); cursor: ns-resize; }
+    .handle.s  { bottom: -7px; left: calc(50% - 6px); cursor: ns-resize; }
+    .handle.e  { top: calc(50% - 6px); right: -7px; cursor: ew-resize; }
+    .handle.w  { top: calc(50% - 6px); left: -7px; cursor: ew-resize; }
+
+    /* Top Instruction Banner */
+    #top-bar {
+      position: fixed;
+      top: 16px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(15, 23, 42, 0.92);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+      backdrop-filter: blur(12px);
+      color: #f8fafc;
+      padding: 8px 16px;
+      border-radius: 24px;
+      font-size: 13px;
+      font-weight: 500;
+      z-index: 99999;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      pointer-events: auto;
+      transition: all 0.2s ease;
+    }
+
+    #top-bar span {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .pill-btn {
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      color: #e2e8f0;
+      padding: 4px 10px;
+      border-radius: 12px;
+      font-size: 12px;
+      cursor: pointer;
+      font-weight: 600;
+      transition: all 0.15s;
+    }
+    .pill-btn:hover {
+      background: rgba(239, 68, 68, 0.25);
+      border-color: rgba(239, 68, 68, 0.5);
+      color: #fca5a5;
+    }
+
+    /* Floating Toolbar */
+    #toolbar {
+      position: fixed;
+      display: none;
+      gap: 8px;
+      background: rgba(15, 23, 42, 0.95);
+      backdrop-filter: blur(12px);
+      padding: 6px 10px;
+      border-radius: 10px;
+      z-index: 9999;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+      cursor: default;
+      align-items: center;
+      white-space: nowrap;
+      pointer-events: auto;
+    }
+
+    .tool-dim-badge {
+      background: rgba(99, 102, 241, 0.15);
+      border: 1px solid rgba(99, 102, 241, 0.3);
+      color: #c7d2fe;
+      font-size: 12px;
+      font-weight: 700;
+      padding: 4px 8px;
+      border-radius: 6px;
+      letter-spacing: 0.3px;
+    }
+
+    .tool-btn {
+      background: #334155;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      color: #f1f5f9;
+      padding: 6px 14px;
+      border-radius: 6px;
+      font-size: 12px;
+      cursor: pointer;
+      font-weight: 600;
+      transition: all 0.15s;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .tool-btn:hover {
+      background: #475569;
+    }
+    .tool-btn.cancel-btn:hover {
+      background: rgba(239, 68, 68, 0.3);
+      border-color: #ef4444;
+      color: #fca5a5;
+    }
+    .tool-btn.confirm-btn {
+      background: #6366f1;
+      border-color: #818cf8;
+      color: #ffffff;
+      box-shadow: 0 2px 8px rgba(99, 102, 241, 0.4);
+    }
+    .tool-btn.confirm-btn:hover {
+      background: #4f46e5;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Instruction Bar -->
+  <div id="top-bar">
+    <span>📐 <strong>Custom Region:</strong> Click & drag to select area</span>
+    <button class="pill-btn" id="btn-top-cancel">Cancel (ESC)</button>
+  </div>
+  
+  <div id="overlay-container">
+    <div id="dark-overlay"></div>
+  </div>
+
+  <div id="selection">
+    <div class="handle nw" data-handle="nw"></div>
+    <div class="handle ne" data-handle="ne"></div>
+    <div class="handle sw" data-handle="sw"></div>
+    <div class="handle se" data-handle="se"></div>
+    <div class="handle n" data-handle="n"></div>
+    <div class="handle s" data-handle="s"></div>
+    <div class="handle e" data-handle="e"></div>
+    <div class="handle w" data-handle="w"></div>
+  </div>
+
+  <!-- Floating Toolbar -->
+  <div id="toolbar">
+    <span class="tool-dim-badge" id="size-label">0 × 0 px</span>
+    <button class="tool-btn cancel-btn" id="btn-cancel">Cancel</button>
+    <button class="tool-btn confirm-btn" id="btn-confirm">✓ Record Region</button>
+  </div>
+
+  <script>
+    let ipc = null;
+    try {
+      if (typeof require !== 'undefined') {
+        const electron = require('electron');
+        ipc = electron.ipcRenderer;
+      } else if (window.require) {
+        const electron = window.require('electron');
+        ipc = electron.ipcRenderer;
+      }
+    } catch (err) {
+      console.error('IPC init error:', err);
+    }
+
+    function sendIpc(channel, payload) {
+      if (ipc && ipc.send) {
+        ipc.send(channel, payload);
+      }
+    }
+    
+    const container = document.getElementById('overlay-container');
+    const darkOverlay = document.getElementById('dark-overlay');
+    const selection = document.getElementById('selection');
+    const handles = document.querySelectorAll('.handle');
+    const toolbar = document.getElementById('toolbar');
+    const sizeLabel = document.getElementById('size-label');
+    const topBar = document.getElementById('top-bar');
+
+    // States: 'idle', 'drawing', 'adjusting', 'resizing', 'moving'
+    let state = 'idle'; 
+    let activeHandle = null;
+    
+    // Bounds in window client coordinates
+    let box = { x: 0, y: 0, w: 0, h: 0 };
+    let startX = 0, startY = 0;
+    let initialBox = null;
+
+    function renderBox() {
+      selection.style.left = box.x + 'px';
+      selection.style.top = box.y + 'px';
+      selection.style.width = box.w + 'px';
+      selection.style.height = box.h + 'px';
+      
+      const widthVal = Math.round(box.w);
+      const heightVal = Math.round(box.h);
+      sizeLabel.textContent = `${widthVal} × ${heightVal} px`;
+
+      // Position toolbar smartly so it never overflows screen edges
+      if (state === 'adjusting' || state === 'moving' || state === 'resizing') {
+        const toolbarW = 280;
+        const toolbarH = 45;
+        
+        let toolX = box.x + (box.w / 2) - (toolbarW / 2);
+        toolX = Math.max(12, Math.min(window.innerWidth - toolbarW - 12, toolX));
+
+        let toolY;
+        if (box.y + box.h + toolbarH + 12 <= window.innerHeight) {
+          toolY = box.y + box.h + 10;
+        } else if (box.y - toolbarH - 12 >= 0) {
+          toolY = box.y - toolbarH - 10;
+        } else {
+          toolY = box.y + box.h - toolbarH - 10;
+        }
+
+        toolbar.style.left = toolX + 'px';
+        toolbar.style.top = toolY + 'px';
+      }
+    }
+
+    function setAdjustingMode() {
+      state = 'adjusting';
+      selection.style.display = 'block';
+      handles.forEach(h => h.style.display = 'block');
+      toolbar.style.display = 'flex';
+      darkOverlay.style.display = 'none';
+      renderBox();
+    }
+
+    function setIdleMode() {
+      state = 'idle';
+      selection.style.display = 'none';
+      handles.forEach(h => h.style.display = 'none');
+      toolbar.style.display = 'none';
+      darkOverlay.style.display = 'block';
+    }
+
+    // 1. Initial Drawing on Background Container
+    container.addEventListener('mousedown', (e) => {
+      if (e.target.closest('#top-bar') || e.target.closest('#toolbar')) return;
+      
+      state = 'drawing';
+      startX = e.clientX;
+      startY = e.clientY;
+      box = { x: startX, y: startY, w: 0, h: 0 };
+      
+      selection.style.display = 'block';
+      handles.forEach(h => h.style.display = 'none');
+      toolbar.style.display = 'none';
+      darkOverlay.style.display = 'none';
+      renderBox();
+    });
+
+    // 2. Moving selection box
+    selection.addEventListener('mousedown', (e) => {
+      if (e.target.classList.contains('handle')) return;
+      if (state === 'adjusting') {
+        state = 'moving';
+        startX = e.clientX;
+        startY = e.clientY;
+        initialBox = { ...box };
+        e.stopPropagation();
+      }
+    });
+
+    // 3. Resizing handles
+    handles.forEach(handle => {
+      handle.addEventListener('mousedown', (e) => {
+        state = 'resizing';
+        activeHandle = e.target.dataset.handle;
+        startX = e.clientX;
+        startY = e.clientY;
+        initialBox = { ...box };
+        e.stopPropagation();
+      });
+    });
+
+    // Global Mousemove
+    document.addEventListener('mousemove', (e) => {
+      if (state === 'drawing') {
+        const currentX = e.clientX;
+        const currentY = e.clientY;
+        box.x = Math.min(startX, currentX);
+        box.y = Math.min(startY, currentY);
+        box.w = Math.abs(currentX - startX);
+        box.h = Math.abs(currentY - startY);
+        renderBox();
+      } 
+      else if (state === 'moving') {
+        const dx = e.clientX - startX;
+        const dy = e.clientY - startY;
+        
+        let newX = initialBox.x + dx;
+        let newY = initialBox.y + dy;
+        
+        // Clamp to screen bounds
+        newX = Math.max(0, Math.min(window.innerWidth - box.w, newX));
+        newY = Math.max(0, Math.min(window.innerHeight - box.h, newY));
+        
+        box.x = newX;
+        box.y = newY;
+        renderBox();
+      } 
+      else if (state === 'resizing') {
+        const dx = e.clientX - startX;
+        const dy = e.clientY - startY;
+        let { x, y, w, h } = initialBox;
+
+        if (activeHandle.includes('e')) w += dx;
+        if (activeHandle.includes('w')) { x += dx; w -= dx; }
+        if (activeHandle.includes('s')) h += dy;
+        if (activeHandle.includes('n')) { y += dy; h -= dy; }
+
+        if (w < 0) {
+          x += w;
+          w = Math.abs(w);
+          activeHandle = activeHandle.replace('w', 'X').replace('e', 'w').replace('X', 'e');
+          startX = e.clientX;
+          initialBox = { x, y, w, h };
+        }
+        if (h < 0) {
+          y += h;
+          h = Math.abs(h);
+          activeHandle = activeHandle.replace('n', 'X').replace('s', 'n').replace('X', 's');
+          startY = e.clientY;
+          initialBox = { x, y, w, h };
+        }
+
+        box = { x, y, w, h };
+        renderBox();
+      }
+    });
+
+    // Global Mouseup
+    document.addEventListener('mouseup', (e) => {
+      if (state === 'drawing') {
+        if (box.w < 20 || box.h < 20) {
+          setIdleMode();
+        } else {
+          setAdjustingMode();
+        }
+      } else if (state === 'moving' || state === 'resizing') {
+        setAdjustingMode();
+      }
+    });
+
+    // Actions
+    function cancelSelection() {
+      sendIpc('region-canceled');
+    }
+
+    function confirmSelection() {
+      const safeBox = {
+        x: Math.max(0, Math.round(box.x)),
+        y: Math.max(0, Math.round(box.y)),
+        width: Math.max(20, Math.round(box.w)),
+        height: Math.max(20, Math.round(box.h))
+      };
+      sendIpc('region-selected', safeBox);
+    }
+
+    document.getElementById('btn-cancel').addEventListener('click', (e) => {
+      e.stopPropagation();
+      cancelSelection();
+    });
+
+    document.getElementById('btn-top-cancel').addEventListener('click', (e) => {
+      e.stopPropagation();
+      cancelSelection();
+    });
+
+    document.getElementById('btn-confirm').addEventListener('click', (e) => {
+      e.stopPropagation();
+      confirmSelection();
+    });
+
+    // Keyboard Shortcuts
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        cancelSelection();
+      } else if (e.key === 'Enter') {
+        if (state === 'adjusting' || state === 'moving' || state === 'resizing') {
+          confirmSelection();
+        }
+      }
+    });
+  </script>
+</body>
+</html>

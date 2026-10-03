@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { Image as ImageIcon, X, Loader2, PlayCircle, Plus, Settings2, CheckCircle2, MonitorPlay, Timer, Minus, ImagePlus, Clock, Sparkles, ChevronUp, ChevronDown, Trash2, ListRestart, GripVertical } from 'lucide-react'
 import { motion, AnimatePresence, Reorder } from 'motion/react'
 
-export default function SlideMakerView({ triggerToast }) {
+export default function SlideMakerView({ triggerToast, isPro, setShowPayModal, setPayModalReason }) {
   const [images, setImages] = useState([])
   const [duration, setDuration] = useState(3)
   const [transition, setTransition] = useState('fade')
@@ -83,6 +83,21 @@ export default function SlideMakerView({ triggerToast }) {
 
   const handleGenerate = async () => {
     if (images.length === 0) return
+
+    // Pro Tier Interception
+    if (!isPro) {
+      if (images.length > 5) {
+        setPayModalReason('Exporting more than 5 slides is a Pro feature.')
+        setShowPayModal(true)
+        return
+      }
+      if (transition !== 'fade') {
+        setPayModalReason('Advanced cinematic transitions are a Pro feature.')
+        setShowPayModal(true)
+        return
+      }
+    }
+
     if (!window.electronAPI) return
     setStatus('processing')
     setLastOutput(null)
@@ -96,7 +111,7 @@ export default function SlideMakerView({ triggerToast }) {
   }
 
   return (
-    <div className="w-full h-full flex flex-col animate-fade-in" style={{ padding: '28px 36px', gap: '18px', paddingBottom: '80px' }}>
+    <div className="w-full h-full flex flex-col animate-fade-in mx-auto" style={{ maxWidth: '1000px', padding: '32px 48px', gap: '18px', paddingBottom: '80px', alignSelf: 'center' }}>
       
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">

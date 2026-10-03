@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Upgrade to Pro Modal</title>
+  <!-- Google Fonts: Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <style>
+    :root {
+      --bg: #090a15;
+      --card-bg: rgba(18, 20, 38, 0.88);
+      --card-border: rgba(255, 255, 255, 0.09);
+      --accent: #6366f1;
+      --accent-gradient: linear-gradient(135deg, #6366f1 0%, #a855f7 50%, #ec4899 100%);
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'Inter', sans-serif;
+    }
+
+    body {
+      background-color: var(--bg);
+      color: var(--text-main);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      overflow: hidden;
+      position: relative;
+    }
+
+    /* Modal Backdrop Blur */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(4, 5, 12, 0.75);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      z-index: 100;
+    }
+
+    /* Upgrade Modal Card */
+    .upgrade-card {
+      position: relative;
+      width: 100%;
+      max-width: 440px;
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 24px;
+      padding: 28px 24px;
+      box-shadow: 0 30px 70px -15px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(255, 255, 255, 0.05);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      overflow: hidden;
+      animation: modalPop 0.25s ease-out;
+    }
+
+    @keyframes modalPop {
+      from { opacity: 0; transform: scale(0.95) translateY(10px); }
+      to { opacity: 1; transform: scale(1) translateY(0); }
+    }
+
+    /* Top Ambient Aura */
+    .modal-glow {
+      position: absolute;
+      top: -80px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 280px;
+      height: 180px;
+      background: radial-gradient(circle, rgba(168, 85, 247, 0.35) 0%, rgba(99, 102, 241, 0.15) 50%, transparent 80%);
+      pointer-events: none;
+    }
+
+    /* Close Button */
+    .close-btn {
+      position: absolute;
+      top: 16px;
+      right: 16px;
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--card-border);
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .close-btn:hover {
+      background: rgba(255, 255, 255, 0.12);
+      color: #fff;
+    }
+
+    /* Hero Badge & Icon */
+    .hero-icon-wrap {
+      width: 58px;
+      height: 58px;
+      border-radius: 18px;
+      background: var(--accent-gradient);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      box-shadow: 0 8px 24px rgba(168, 85, 247, 0.4);
+      margin-bottom: 16px;
+    }
+
+    .lifetime-pill {
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: #c084fc;
+      background: rgba(168, 85, 247, 0.12);
+      border: 1px solid rgba(168, 85, 247, 0.25);
+      padding: 4px 10px;
+      border-radius: 20px;
+      margin-bottom: 8px;
+    }
+
+    .modal-title {
+      font-size: 1.4rem;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      color: #fff;
+      margin-bottom: 6px;
+    }
+
+    .modal-subtitle {
+      font-size: 0.82rem;
+      color: var(--text-muted);
+      line-height: 1.4;
+      max-width: 340px;
+      margin-bottom: 22px;
+    }
+
+    /* Feature List */
+    .features-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      width: 100%;
+      margin-bottom: 24px;
+    }
+
+    .feature-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: rgba(255, 255, 255, 0.025);
+      border: 1px solid rgba(255, 255, 255, 0.04);
+      padding: 10px 14px;
+      border-radius: 12px;
+      text-align: left;
+    }
+
+    .feature-icon-box {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      background: rgba(99, 102, 241, 0.12);
+      border: 1px solid rgba(99, 102, 241, 0.25);
+      color: #a5b4fc;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .feature-text h4 {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: #f1f5f9;
+    }
+
+    .feature-text p {
+      font-size: 0.72rem;
+      color: var(--text-muted);
+    }
+
+    /* Primary CTA Button */
+    .btn-upgrade {
+      width: 100%;
+      background: var(--accent-gradient);
+      border: none;
+      color: #fff;
+      padding: 14px;
+      border-radius: 14px;
+      font-size: 0.95rem;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      box-shadow: 0 6px 20px rgba(99, 102, 241, 0.4);
+      transition: all 0.2s ease;
+    }
+
+    .btn-upgrade:hover {
+      box-shadow: 0 8px 28px rgba(168, 85, 247, 0.5);
+      transform: translateY(-1px);
+    }
+
+    .btn-upgrade:active {
+      transform: translateY(0);
+    }
+
+    /* License Key Link */
+    .license-link {
+      margin-top: 14px;
+      font-size: 0.78rem;
+      color: var(--text-muted);
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      transition: color 0.15s;
+    }
+
+    .license-link span {
+      color: #cbd5e1;
+      text-decoration: underline;
+      font-weight: 500;
+    }
+
+    .license-link:hover span {
+      color: #fff;
+    }
+
+    /* Micro Trust Signals */
+    .trust-footer {
+      display: flex;
+      gap: 12px;
+      font-size: 0.68rem;
+      color: #64748b;
+      margin-top: 16px;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Modal Overlay Backdrop -->
+  <div class="modal-overlay">
+    <div class="upgrade-card">
+      <div class="modal-glow"></div>
+
+      <!-- Close Action -->
+      <button class="close-btn" title="Close">
+        <i data-lucide="x" style="width: 16px; height: 16px;"></i>
+      </button>
+
+      <!-- Badge & Icon -->
+      <div class="hero-icon-wrap">
+        <i data-lucide="sparkles" style="width: 28px; height: 28px;"></i>
+      </div>
+      <span class="lifetime-pill">One-Time Purchase</span>
+
+      <h2 class="modal-title">Unlock 4K & 8K Resolution</h2>
+      <p class="modal-subtitle">Get lifetime access to the ultimate media suite with zero recurring subscriptions.</p>
+
+      <!-- Features List -->
+      <div class="features-list">
+        <div class="feature-item">
+          <div class="feature-icon-box">
+            <i data-lucide="film" style="width: 16px; height: 16px;"></i>
+          </div>
+          <div class="feature-text">
+            <h4>Ultra HD 4K & 8K Exports</h4>
+            <p>Download and convert videos in crisp, lossless fidelity.</p>
+          </div>
+        </div>
+
+        <div class="feature-item">
+          <div class="feature-icon-box">
+            <i data-lucide="zap" style="width: 16px; height: 16px; color: #fbbf24;"></i>
+          </div>
+          <div class="feature-text">
+            <h4>16-Thread Turbo Mode</h4>
+            <p>Max out bandwidth with multi-threaded parallel downloads.</p>
+          </div>
+        </div>
+
+        <div class="feature-item">
+          <div class="feature-icon-box">
+            <i data-lucide="infinity" style="width: 16px; height: 16px; color: #34d399;"></i>
+          </div>
+          <div class="feature-text">
+            <h4>Unlimited Slideshow Generation</h4>
+            <p>Export batch photo presentations with no daily quotas.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Main Upgrade CTA -->
+      <button class="btn-upgrade">
+        <i data-lucide="zap" style="width: 18px; height: 18px;"></i>
+        Upgrade to Pro — $19.99
+      </button>
+
+      <!-- License Key Toggle -->
+      <button class="license-link">
+        Already have a key? <span>Enter License Key</span>
+      </button>
+
+      <!-- Trust Badges -->
+      <div class="trust-footer">
+        <span>✓ Instant Delivery</span>
+        <span>•</span>
+        <span>✓ Lifetime Free Updates</span>
+        <span>•</span>
+        <span>✓ 30-Day Guarantee</span>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    lucide.createIcons();
+  </script>
+</body>
+</html>
